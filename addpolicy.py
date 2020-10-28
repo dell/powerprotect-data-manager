@@ -80,7 +80,7 @@ def authenticate(ppdm, user, password, uri):
     return token
 
 def get_policy(uri, token):
-    # Get configured Policys
+    # Get configured Policies
     suffixurl = "/protection-policies"
     uri += suffixurl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
