@@ -3,6 +3,7 @@
 This repository contains Python scripts for common flows in Dell EMC PowerProtect
 ## Authors
 - **Idan Kentor** - [Dell EMC](https://www.dellemc.com)
+- **Qi Wang** - [Dell EMC](https://www.dellemc.com)
 ## Supported Platforms
 - PowerProtect Data Manager 19.3/19.4
 ## Prerequisites
@@ -18,7 +19,7 @@ This repository contains Python scripts for common flows in Dell EMC PowerProtec
 - [Update Protection Policy Schedule](updateprotectionpolicyschedule.py)
 - [Ad-hoc VM Backup](adhocvmbck.py)
 - [Remove Asset Source](removeassetsrc.py)
-- [Create PLC](addplc.py)
+- [Create Policy](addpolicy.py)
 - [Credentials Management](credsmgmt.py)
 
 
