@@ -1,12 +1,12 @@
 # PowerProtect Data Manager Python Scripts
 
-##Prerequisites
+## Prerequisites
 - Python 3.x
 
-##Usage
+## Usage
 - See the help page of each script (i.e assetmgmt.py -h)
 
-##List of Scripts
+## List of Scripts
 - [Asset Management](assetmgmt.py)
 - [Restore VM to Original](restorevmorig.py)
 - [File Level Restore](filelevelrestore.py)
