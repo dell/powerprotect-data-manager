@@ -1,4 +1,4 @@
-# PowerProtect Data Manager Python Scripts
+# PowerProtect Data Manager Common Use Cases Python Scripts
 
 ## Prerequisites
 - Python 3.x

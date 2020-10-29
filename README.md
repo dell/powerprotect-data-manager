@@ -1,8 +1,8 @@
-# Dell EMC PowerProtect - Common Flows
+# Dell EMC PowerProtect Data Manager - Common Flows
 This repository contains Use Cases for common flows in Dell EMC PowerProtect Data Manager.
 It composed by 3 main parts.
-- [PowerProtect Data Manager Python Scripts](#powerprotect-data-manager-python-scripts)
-- [PowerProtect Data Manager SDK and Use Cases](#powerprotect-data-manager-sdk-and-use-cases)
+- [PowerProtect Data Manager Common Use Cases Python Scripts](powerprotect-data-manager-common-use-cases-python-scripts)
+- [PowerProtect Data Manager SDK](#powerprotect-data-manager-sdk)
 - [PowerProtect Data Manager Postman Collection](#powerprotect-data-manager-postman-collection)
 
 ## Authors
@@ -16,7 +16,7 @@ It composed by 3 main parts.
 - PowerProtect RESTAPI Documentation - [Dell Technologies API Explorer](https://developer.dellemc.com)
 - PowerProtect Documentation - [Dell EMC Online Support](https://www.dell.com/support/home/us/en/04/product-support/product/enterprise-copy-data-management/docs)
 
-## PowerProtect Data Manager Python Scripts
+## PowerProtect Data Manager Common Use Cases Python Scripts
 
 ### Prerequisites
 - Python 3.x
@@ -34,7 +34,7 @@ It composed by 3 main parts.
 - [Create Policy](ppdm-python-scripts/addpolicy.py)
 - [Credentials Management](ppdm-python-scripts/credsmgmt.py)
 
-## PowerProtect Data Manager SDK and Use Cases
+## PowerProtect Data Manager SDK
 - Coming soon ...
 
 ## PowerProtect Data Manager Postman Collection
