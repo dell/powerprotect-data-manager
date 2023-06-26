@@ -1,4 +1,4 @@
-# Dell Technologies PowerProtect Data Manager | PowerShell7
+# PowerShell7
 # Authors
 Cliff Rodriguez
   * [Dell Technoligies](https://www.dell.com/en-us)
