@@ -7,17 +7,29 @@ Cliff Rodriguez
 * PowerProtect Data Manager 19.13
 # Prerequisites
 * PowerShell 7.(latest) - [github](https://github.com/PowerShell/powershell/releases)
+# Conventions
+* CMDLET Guidelines
+* CMDLET names are in lower case
+* CMDLET names begin with a PowerShell approved verb
+* CMDLET nouns are prefixed with dm to avoid any naming convention collisions
+* CMDLET variables are in camel case
+* CMDLET bindings must be used outside of:
+* * $global:ApiVersion
+* * $global:AuthObject
+* * $global:Port
+* CMDLET help must be defined
+* List module functions
+* * PS> Import-Module .\dell.ppdm.psm1 -Force
+* * PS> Get-Command -Module dell.ppdm
+* List cmdlet help after module is imported (basic, detailed, verbose w/ examples)
+* * PS> {cmdlet-name} -?
+* * PS> Get-Help -Name {cmdlet-name} -Detailed
+* * PS> Get-Help -Name {cmdlet-name} -Full
 # Documentation
 * PowerProtect Data Manager - [rest api](https://developer.dell.com/apis/4378/versions/19.13.0/docs/introduction.md)
 * PowerProtect Data Manager - [info hub](https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information?lang=en)
 * PowerShell 7.(latest) - [docs](https://learn.microsoft.com/en-us/powershell)
-* List module functions
-  * PS> Import-Module .\dell.ppdm.psm1 -Force
-  * PS> Get-Command -Module dell.ppdm
-* List cmdlet help after module is imported (basic, detailed, verbose w/ examples)
-  * PS> {cmdlet-name} -?
-  * PS> Get-Help -Name {cmdlet-name} -Detailed
-  * PS> Get-Help -Name {cmdlet-name} -Full
+
 
 # Examples
 | Name        | Description                                                              | Environment | Category |
