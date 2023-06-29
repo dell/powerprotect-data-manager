@@ -12,7 +12,7 @@ Cliff Rodriguez
 * CMDLET names are in lower case
 * CMDLET names begin with a PowerShell [approved verb](https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands?view=powershell-7.3)
 * CMDLET nouns are prefixed with dm to avoid any naming convention collisions
-* CMDLET variables are in camel case
+* CMDLET variables are in pascal case
 * CMDLET bindings must be used outside of:
   * $global:ApiVersion
   * $global:AuthObject
