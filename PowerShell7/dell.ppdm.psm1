@@ -10,7 +10,7 @@
             - https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands?view=powershell-7.3
         - CMDLET nouns are prefixed with dm to avoid any naming convention collisions 
         - CMDLET variables are in camel case
-        - CMDLET bindings must be used outsie of:
+        - CMDLET bindings must be used outside of:
             - $global:ApiVersion
             - $global:AuthObject
             - $global:Port
