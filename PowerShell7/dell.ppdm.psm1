@@ -1249,13 +1249,14 @@ function get-dmcredentials {
         $Page = 1
         $Results = @()
         $Endpoint = "credentials"
+
         if($Filters.Length -gt 0) {
             $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
-            $Endpoint = "$($Endpoint)?filter=$($Join)&pageSize=$($PageSize)&page=$($Page)"
+            $Endpoint = "$($Endpoint)?filter=$($Join)"
         }else {
-            $Endpoint = "$($Endpoint)?pageSize=$($PageSize)&page=$($Page)"
+            $Endpoint = "$($Endpoint)?"
         }
-        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
         -Method GET `
         -ContentType 'application/json' `
         -Headers ($AuthObject.token) `
@@ -1269,8 +1270,7 @@ function get-dmcredentials {
             $Page++
             # PAGE THROUGH THE RESULTS
             do {
-                Write-Host "GET /$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" -foregroundcolor Yellow
-                $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+                $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
                 -Method GET `
                 -ContentType 'application/json' `
                 -Headers ($AuthObject.token) `
