@@ -8,6 +8,10 @@ Import-Module .\dell.ppdm.psm1 -Force
 # VARS
 $Server = "ppdm-01.vcorp.local"
 $PageSize = 100
+$VMware = "vc-01.vcorp.local"
+$DC = "DC01-VC01"
+$ClusterName = "Cluster01"
+$RP = "Database"
 
 # CONNECT THE THE REST API
 connect-dmapi -Server $Server
@@ -17,7 +21,7 @@ $Filters = @(
     "viewType eq `"HOST`""
 )
 $vCenter = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "vc-01.vcorp.local"}
+where-object {$_.name -eq "$($VMware)"}
 
 # GET THE DATACENTER
 $Filters = @(
@@ -25,7 +29,7 @@ $Filters = @(
     "and parentId eq `"$($vCenter.id)`""
 )
 $Datacenter = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "DC01-VC01"}
+where-object {$_.name -eq "$($DC)"}
 
 # GET A CLUSTER
 $Filters = @(
@@ -34,7 +38,7 @@ $Filters = @(
 
 )
 $Cluster = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "Cluster01"}
+where-object {$_.name -eq "$($ClusterName)"}
 
 # GET A RESOURCE POOL
 $Filters = @(
@@ -42,7 +46,7 @@ $Filters = @(
     "and parentId eq `"$($Cluster.id)`""
 )
 $Pool = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "Database"}
+where-object {$_.name -eq "$($RP)"}
 
 $Pool | format-list
 

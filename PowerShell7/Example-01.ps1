@@ -16,10 +16,12 @@ $Filters = @(
     "name eq `"vc1-ubu-01`""
 )
 # GET ASSETS BASED ON FILTERS
-get-dmassets -Filters $Filters -PageSize $PageSize
+$Assets = get-dmassets -Filters $Filters -PageSize $PageSize
 
 # GET ALL ASSETS
-# get-dmassets -PageSize $PageSize
+# $Assets = get-dmassets -PageSize $PageSize
+
+$Assets | format-list
 
 # DISCONNECT FROM THE REST API
 disconnect-dmapi

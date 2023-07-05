@@ -54,3 +54,4 @@ Cliff Rodriguez
 | Example-18  | Get agents registered with the system                                    | ANY         | Query    |
 | Example-19  | Get a certificate from 3rd party application                             | ANY         | Query    |
 | Example-20  | Deploy a protection engine                                               | VMWARE      | Config   |
+| Example-21  | Get credentials based on filters                                         | ANY         | Query    |
