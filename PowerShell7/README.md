@@ -55,3 +55,4 @@ Cliff Rodriguez
 | Example-19  | Get a certificate from 3rd party application                             | ANY         | Query    |
 | Example-20  | Deploy a protection engine                                               | VMWARE      | Config   |
 | Example-21  | Get credentials based on filters                                         | ANY         | Query    |
+| Example-22  | Set asset disk exclusions                                                | VMWARE      | Config   |

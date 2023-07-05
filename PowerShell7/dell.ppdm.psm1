@@ -1289,4 +1289,92 @@ function get-dmcredentials {
     } # END PROCESS
 }  # END FUNCTION
 
+function set-dmdiskexclusions {
+<#
+    .SYNOPSIS
+    Set PowerProtect Data Manager asset disk exclusions
+    
+    .DESCRIPTION
+    Set PowerProtect Data Manager asset disk exclusions
+
+    .PARAMETER Asset
+    An object representing the asset
+
+    .PARAMETER Config
+    An array representing the the desired disk exclusion configuration for the asset
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> set-dmdiskexclusions -Asset $Asset -Config $_.disks
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets~1%7Bid%7D/patch
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Asset,
+        [Parameter( Mandatory=$true)]
+        [array]$Config
+    )
+    begin {
+        
+    } #END BEGIN
+    process {
+        $Results = @()
+        $Endpoint = "assets/$($Asset.id)"
+
+        $Disks = $Asset.details.vm.disks
+        [array]$Settings = @()
+   
+
+        # ENUMERATE THE DISKS ARRAY
+        foreach($Disk in $Config) {
+
+            # ALWAYS SET HARD DISK 1 TO EXCLUDE = $false
+            if($Disk.label -eq 'Hard disk 1') {
+                # CREATE THE SETTINGS
+                    $object = @{
+                        excluded = $false
+                        key = ($Disks | where-object {$_.label -eq $Disk.label}).key
+                        name = ($Disks | where-object {$_.label -eq $Disk.label}).name
+                    }
+                } else {
+                    $object = @{
+                        excluded = $Disk.excluded
+                        key = ($Disks | where-object {$_.label -eq $Disk.label}).key
+                        name = ($Disks | where-object {$_.label -eq $Disk.label}).name
+                    }
+            } # END IF
+
+            # ADD THE SETTINGS TO THE SETTINGS ARRAY
+            $Settings += (New-Object -TypeName pscustomobject -Property $object)
+
+        } # END FOREACH
+        # CREATE THE REQUEST BODY WITH THE NEW SETTINGS
+        $Body = [ordered]@{
+            id = $Asset.id
+            details = @{
+                vm = [ordered]@{
+                    disks = $Settings | sort-Object key
+                }
+            }
+        }
+        
+        $Action =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method PATCH `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 25) `
+        -SkipCertificateCheck
+        $Results += $Action
+
+        return $Results
+
+    }
+}
+
 Export-ModuleMember -Function *
