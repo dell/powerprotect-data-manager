@@ -1331,7 +1331,7 @@ function set-dmdiskexclusions {
         [array]$Settings = @()
    
 
-        # ENUMERATE THE DISKS ARRAY
+        # ENUMERATE THE CONFIG ARRAY
         foreach($Disk in $Config) {
 
             # ALWAYS SET HARD DISK 1 TO EXCLUDE = $false
