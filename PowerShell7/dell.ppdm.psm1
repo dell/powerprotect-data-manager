@@ -1359,7 +1359,7 @@ function set-dmdiskexclusions {
             id = $Asset.id
             details = @{
                 vm = [ordered]@{
-                    disks = $Settings | sort-Object key
+                    disks = $Settings | sort-object key
                 }
             }
         }
