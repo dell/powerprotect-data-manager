@@ -20,10 +20,12 @@ $Filters = @(
     "and startTime ge `"$($Date.ToString('yyyy-MM-dd'))T00:00:00.000Z`""
     "and result.status eq `"OK`""
     )
-get-dmactivities -Filters $Filters -PageSize $PageSize
+$Activities = get-dmactivities -Filters $Filters -PageSize $PageSize
 
 # GET ALL ACTIVITIES
-# get-dmactivities -PageSize $PageSize
+# $Activities = get-dmactivities -PageSize $PageSize
+
+$Activities | format-list
 
 # DISCONNECT FROM THE REST API
 disconnect-dmapi

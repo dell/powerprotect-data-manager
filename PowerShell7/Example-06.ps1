@@ -8,6 +8,9 @@ Import-Module .\dell.ppdm.psm1 -Force
 # VARS
 $Server = "ppdm-01.vcorp.local"
 $PageSize = 100
+$VMware = "vc-01.vcorp.local"
+$DC = "DC01-VC01"
+$FolderName = "Recover"
 
 # CONNECT THE THE REST API
 connect-dmapi -Server $Server
@@ -17,7 +20,7 @@ $Filters = @(
     "viewType eq `"HOST`""
 )
 $vCenter = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "vc-01.vcorp.local"}
+where-object {$_.name -eq "$($VMware)"}
 
 # GET THE DATACENTER
 $Filters = @(
@@ -25,7 +28,7 @@ $Filters = @(
     "and parentId eq `"$($vCenter.id)`""
 )
 $Datacenter = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "DC01-VC01"}
+where-object {$_.name -eq "$($DC)"}
 
 # GET A FOLDER
 $Filters = @(
@@ -33,7 +36,7 @@ $Filters = @(
     "and parentId eq `"$($Datacenter.id)`""
 )
 $Folder = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "Recover"}
+where-object {$_.name -eq "$($FolderName)"}
 
 $Folder | format-list
 

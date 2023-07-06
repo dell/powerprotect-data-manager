@@ -12,16 +12,17 @@ $PageSize = 100
 # CONNECT THE THE REST API
 connect-dmapi -Server $Server
 
-# GET ALERTS BASED ON FILTERS
+# GET AUDIT LOGS BASED ON A FILTER
 $Filters = @(
-    "acknowledgement.acknowledgeState eq `"UNACKNOWLEDGED`""
+    "auditType eq `"SECURITY`"",
+    "and changedObject.resourceType eq `"/login`""
 )
-$Alerts = get-dmalerts -Filters $Filters -PageSize $PageSize
+$Audit = get-dmauditlogs -Filters $Filters -PageSize $PageSize
 
-# GET ALL ALERTS
-# $Alerts = get-dmalerts -PageSize $PageSize
+# GET ALL AUDIT LOGS
+# $Audit = get-dmauditlogs -PageSize $PageSize
 
-$Alerts | format-list 
+$Audit | format-list
 
 # DISCONNECT FROM THE REST API
 disconnect-dmapi

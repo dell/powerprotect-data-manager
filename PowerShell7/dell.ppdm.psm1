@@ -1,23 +1,3 @@
-<#
-    THIS CODE REQUIRES POWWERSHELL 7.x.(latest)
-    https://github.com/PowerShell/powershell/releases
-
-    CONVENTIONS
-    - CMDLET Guidelines:
-        - https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/cmdlet-development-guidelines?view=powershell-7.3
-        - CMDLET names are in lower case
-        - CMDLET names begin with a PowerShell approved verb
-            - https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands?view=powershell-7.3
-        - CMDLET nouns are prefixed with dm to avoid any naming convention collisions 
-        - CMDLET variables are in pascal case
-        - CMDLET bindings must be used outside of:
-            - $global:ApiVersion
-            - $global:AuthObject
-            - $global:Port
-        - CMDLET help must be defined
-
-#>
-
 $global:ApiVersion = 'v2'
 $global:Port = 8443
 $global:AuthObject = $null
@@ -138,10 +118,15 @@ function get-dmassets {
     System.Array
 
     .EXAMPLE
+    PS> # GET ASSETS BASED ON A FILTER
     PS> $Filters = @(
     "name eq `"vc1-ubu-01`""
     )
-    PS>  get-dmassets -Filters $Filters -PageSize 100
+    PS> $Assets = get-dmassets -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL ASSETS
+    PS> $Assets = get-dmassets -PageSize $PageSize
 
     .LINK
     https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets/get
@@ -214,6 +199,7 @@ function get-dmactivities {
     System.Array
 
     .EXAMPLE
+    PS> # GET ACTIVITIES BASED ON A FILTER
     PS> $Date = (Get-Date).AddDays(-1)
     PS> $Filters = @(
     "classType eq `"JOB`""
@@ -221,7 +207,11 @@ function get-dmactivities {
     "and startTime ge `"$($Date.ToString('yyyy-MM-dd'))T00:00:00.000Z`""
     "and result.status eq `"FAILED`""
     )
-    PS>  get-dmactivities -Filters $Filters -PageSize 100
+    PS> $Activities = get-dmactivities -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL ACTIVITIES
+    PS> $Activities = get-dmactivities -PageSize $PageSize
 
     .LINK
     https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities/get
@@ -279,7 +269,7 @@ function get-dmalerts {
     Get PowerProtect Data Manager alerts
 
     .DESCRIPTION
-    Get PowerProtect Data Manager alerts based on filters
+    Get PowerProtect Data Manager alerts
 
     .PARAMETER Filters
     An array of values used to filter the query
@@ -291,10 +281,15 @@ function get-dmalerts {
     System.Array
 
     .EXAMPLE
+    PS> # GET ALERTS BASED ON A FILTER
     PS> $Filters = @(
         "acknowledgement.acknowledgeState eq `"UNACKNOWLEDGED`""
     )
-    PS>  get-dmalerts -Filters $Filters -PageSize 100
+    PS> $Alerts = get-dmalerts -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL ALERTS
+    PS> $Alerts = get-dmalerts -PageSize $PageSize
 
     .LINK
     https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1alerts/get
@@ -369,7 +364,7 @@ function get-dmvirtualcontainers {
         "viewType eq `"HOST`""
     )
     PS>  $vCenter = get-dmvirtualcontainers -Filters $Filters -PageSize 100 | `
-    where-object {$_.name -eq "vc-01.vcorp.local"}
+    where-object {$_.name -eq "$($VMware)"}
 
     .EXAMPLE
     PS> # Get the datacenter
@@ -378,7 +373,7 @@ function get-dmvirtualcontainers {
     "and parentId eq `"$($vCenter.id)`""
     )
     PS>  $Datacenter = get-dmvirtualcontainers -Filters $Filters -PageSize 100 | `
-    where-object {$_.name -eq "DC01-VC01"}
+    where-object {$_.name -eq "$($DC)"}
 
     .EXAMPLE
     PS> # Get a folder
@@ -387,7 +382,7 @@ function get-dmvirtualcontainers {
     "and parentId eq `"$($Datacenter.id)`""
     )
     PS>  $Folder= get-dmvirtualcontainers -Filters $Filters -PageSize 100 | `
-    where-object {$_.name -eq "Recover"}
+    where-object {$_.name -eq "$($FolderName)"}
 
     .EXAMPLE
     PS> # Get a cluster
@@ -397,7 +392,7 @@ function get-dmvirtualcontainers {
 
     )
     $Cluster = get-dmvirtualcontainers -Filters $Filters -PageSize 100 | `
-    where-object {$_.name -eq "Cluster01"}
+    where-object {$_.name -eq "$($ClusterName)"}
 
     .EXAMPLE
     PS> # Get a resource pool
@@ -406,7 +401,22 @@ function get-dmvirtualcontainers {
         "and parentId eq `"$($Cluster.id)`""
     )
     $Pool = get-dmvirtualcontainers -Filters $Filters -PageSize 100 | `
-    where-object {$_.name -eq "Database"}
+    where-object {$_.name -eq "$($RP)"}
+
+    .EXAMPLE
+    PS> # Get an ESX host
+    PS> $Filters = @(
+    "viewType eq `"HOST`"",
+    "and parentId eq `"$($Cluster.id)`""
+    )
+    PS> $Esx = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
+    where-object {$_.name -eq "$($EsxName)"}
+
+    PS> Get a datastore
+    PS> $Datastores = get-dmesxdatastore `
+        -InventorySourceId $vCenter.inventorySourceId `
+        -HostSystemId $Esx.details.esxHost.attributes.esxHost.hostMoref | `
+        where-object {$_.name -eq "$($DS)"}
 
 #>
     [CmdletBinding()]
@@ -1195,6 +1205,358 @@ function new-dmengine {
         -SkipCertificateCheck
 
         return $Action
+    }
+}
+
+function get-dmcredentials {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager Credentials
+    
+    .DESCRIPTION
+    Get PowerProtect Data Manager Credentials
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET CREDENTIALS BASED ON A FILTER
+    PS> $Filters = @(
+        "name eq `"SYSADMIN`""
+    )
+    PS> $Credentials = get-dmcredentials -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL CREDENTIALS
+    PS>  $Credentials = get-dmcredentials -PageSize $PageSize
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/get
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$false)]
+        [array]$Filters,
+        [Parameter( Mandatory=$true)]
+        [int]$PageSize
+    )
+    begin {}
+    process {
+        $Page = 1
+        $Results = @()
+        $Endpoint = "credentials"
+
+        if($Filters.Length -gt 0) {
+            $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+            $Endpoint = "$($Endpoint)?filter=$($Join)"
+        }else {
+            $Endpoint = "$($Endpoint)?"
+        }
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -SkipCertificateCheck
+
+        # CAPTURE THE RESULTS
+        $Results = $Query.content
+        
+        if($Query.page.totalPages -gt 1) {
+            # INCREMENT THE PAGE NUMBER
+            $Page++
+            # PAGE THROUGH THE RESULTS
+            do {
+                $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
+                -Method GET `
+                -ContentType 'application/json' `
+                -Headers ($AuthObject.token) `
+                -SkipCertificateCheck
+
+                # CAPTURE THE RESULTS
+                $Results += $Paging.content
+
+                # INCREMENT THE PAGE NUMBER
+                $Page++   
+            } 
+            until ($Paging.page.number -eq $Query.page.totalPages)
+        }
+        return $Results
+
+    } # END PROCESS
+}  # END FUNCTION
+
+function set-dmdiskexclusions {
+<#
+    .SYNOPSIS
+    Set PowerProtect Data Manager asset disk exclusions
+    
+    .DESCRIPTION
+    Set PowerProtect Data Manager asset disk exclusions
+
+    .PARAMETER Asset
+    An object representing the asset
+
+    .PARAMETER Config
+    An array representing the the desired disk exclusion configuration for the asset
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> set-dmdiskexclusions -Asset $Asset -Config $_.disks
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets~1%7Bid%7D/patch
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Asset,
+        [Parameter( Mandatory=$true)]
+        [array]$Config
+    )
+    begin {
+        
+    } #END BEGIN
+    process {
+        $Results = @()
+        $Endpoint = "assets/$($Asset.id)"
+
+        $Disks = $Asset.details.vm.disks
+        [array]$Settings = @()
+   
+
+        # ENUMERATE THE CONFIG ARRAY
+        foreach($Disk in $Config) {
+
+            # ALWAYS SET HARD DISK 1 TO EXCLUDE = $false
+            if($Disk.label -eq 'Hard disk 1') {
+                # CREATE THE SETTINGS
+                    $object = @{
+                        excluded = $false
+                        key = ($Disks | where-object {$_.label -eq $Disk.label}).key
+                        name = ($Disks | where-object {$_.label -eq $Disk.label}).name
+                    }
+                } else {
+                    $object = @{
+                        excluded = $Disk.excluded
+                        key = ($Disks | where-object {$_.label -eq $Disk.label}).key
+                        name = ($Disks | where-object {$_.label -eq $Disk.label}).name
+                    }
+            } # END IF
+
+            # ADD THE SETTINGS TO THE SETTINGS ARRAY
+            $Settings += (New-Object -TypeName pscustomobject -Property $object)
+
+        } # END FOREACH
+        # CREATE THE REQUEST BODY WITH THE NEW SETTINGS
+        $Body = [ordered]@{
+            id = $Asset.id
+            details = @{
+                vm = [ordered]@{
+                    disks = $Settings | sort-object key
+                }
+            }
+        }
+        
+        $Action =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method PATCH `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 25) `
+        -SkipCertificateCheck
+        $Results += $Action
+
+        return $Results
+
+    }
+}
+
+function new-dmcredential {
+<#
+    .SYNOPSIS
+    Creates a new set of credentials for PowerProtect Data Manager
+    
+    .DESCRIPTION
+    Creates a new set of credentials for PowerProtect Data Manager
+
+    .PARAMETER Body
+    An object representing the request body for a protection engine deployment
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # CREATES A NEW SET OF CREDENTIALS
+    PS> $Credentials = new-dmcredential -Body $Body
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/post
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+    )
+    begin {}
+    process {
+
+        # GET A CERTIFICATE
+        $Endpoint = "credentials"
+        
+        $Action = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 10) `
+        -SkipCertificateCheck
+
+        return $Action
+    }
+}
+
+function new-dmsearchnode {
+<#
+    .SYNOPSIS
+    Deploy a new PowerProtect Data Manager Search Node
+    
+    .DESCRIPTION
+    Deploy a new PowerProtect Data Manager Search Node
+
+    .PARAMETER Id
+    A string representing the search node id
+
+    .PARAMETER Body
+    An object representing the request body for a search node deployment
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # DEPLOY A SEARCH NODE
+    PS> $SearchNode = new-dmsearchnode -Body $Body
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters/get
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters~1%7Bid%7D~1nodes/post
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+    )
+    begin {}
+    process {
+
+        # GET THE SEARCH NODE ID
+        $Endpoint = "search-clusters"
+        $Query = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -SkipCertificateCheck
+
+        $Id = ($Query.content | where-object {$_.name -eq "Search"}).id
+
+        # DEPLOY A NEW SEARCH NODE
+        $Endpoint = "search-clusters/$($Id)/nodes"
+        
+        $Action = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 10) `
+        -SkipCertificateCheck
+
+        return $Action
+    }
+}
+
+function get-dmauditlogs {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager audit logs
+
+    .DESCRIPTION
+    Get PowerProtect Data Manager audit logs
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .PARAMETER PageSize
+    An int representing the desired number of elements per page
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET AUDIT LOGS BASED ON A FILTER
+    PS> $Filters = @(
+        "auditType eq `"SECURITY`"",
+        "and changedObject.resourceType eq `"/login`""
+    )
+    PS> $Audit = get-dmauditlogs -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL AUDIT LOGS
+    PS> $Audit = get-dmauditlogs -PageSize $PageSize
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1audit-logs/get
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$false)]
+        [array]$Filters,
+        [Parameter( Mandatory=$true)]
+        [int]$PageSize
+    )
+    begin {}
+    process {
+        $Results = @()
+        $Endpoint = "audit-logs"
+        
+        if($Filters.Length -gt 0) {
+            $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+            $Endpoint = "$($Endpoint)?filter=$($Join)&pageSize=$($PageSize)"
+        } else {
+            $Endpoint = "$($Endpoint)?pageSize=$($PageSize)"
+        }
+
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&queryState=BEGIN" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -SkipCertificateCheck
+        $Results += $Query.content
+
+        $Page = 1
+        do {
+            $Token = "$($Query.page.queryState)"
+            if($Page -gt 1) {
+                $Token = "$($Paging.page.queryState)"
+            }
+            $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&queryState=$($Token)" `
+            -Method GET `
+            -ContentType 'application/json' `
+            -Headers ($AuthObject.token) `
+            -SkipCertificateCheck
+            $Results += $Paging.content
+
+            $Page++;
+        } 
+        until ($Paging.page.queryState -eq "END")
+        return $Results
     }
 }
 
