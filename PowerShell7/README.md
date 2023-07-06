@@ -58,3 +58,4 @@ Cliff Rodriguez
 | Example-22  | Set custom disk exclusions per asset                                     | VMWARE      | Config   |
 | Example-23  | Create new credentials                                                   | ANY         | Config   |
 | Example-24  | Deploy a search node                                                     | VMWARE      | Config   |
+| Example-25  | Get the audit logs based on filters                                      | ANY         | Query    |

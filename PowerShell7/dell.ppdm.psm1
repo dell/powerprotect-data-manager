@@ -1481,4 +1481,83 @@ function new-dmsearchnode {
     }
 }
 
+function get-dmauditlogs {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager audit logs
+
+    .DESCRIPTION
+    Get PowerProtect Data Manager audit logs
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .PARAMETER PageSize
+    An int representing the desired number of elements per page
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET AUDIT LOGS BASED ON A FILTER
+    PS> $Filters = @(
+        "auditType eq `"SECURITY`"",
+        "and changedObject.resourceType eq `"/login`""
+    )
+    PS> $Audit = get-dmauditlogs -Filters $Filters -PageSize $PageSize
+
+    .EXAMPLE
+    PS> # GET ALL AUDIT LOGS
+    PS> $Audit = get-dmauditlogs -PageSize $PageSize
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1audit-logs/get
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$false)]
+        [array]$Filters,
+        [Parameter( Mandatory=$true)]
+        [int]$PageSize
+    )
+    begin {}
+    process {
+        $Results = @()
+        $Endpoint = "audit-logs"
+        
+        if($Filters.Length -gt 0) {
+            $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+            $Endpoint = "$($Endpoint)?filter=$($Join)&pageSize=$($PageSize)"
+        } else {
+            $Endpoint = "$($Endpoint)?pageSize=$($PageSize)"
+        }
+
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&queryState=BEGIN" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -SkipCertificateCheck
+        $Results += $Query.content
+
+        $Page = 1
+        do {
+            $Token = "$($Query.page.queryState)"
+            if($Page -gt 1) {
+                $Token = "$($Paging.page.queryState)"
+            }
+            $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&queryState=$($Token)" `
+            -Method GET `
+            -ContentType 'application/json' `
+            -Headers ($AuthObject.token) `
+            -SkipCertificateCheck
+            $Results += $Paging.content
+
+            $Page++;
+        } 
+        until ($Paging.page.queryState -eq "END")
+        return $Results
+    }
+}
+
 Export-ModuleMember -Function *
