@@ -1377,4 +1377,49 @@ function set-dmdiskexclusions {
     }
 }
 
+function new-dmcredential {
+<#
+    .SYNOPSIS
+    Creates a new set of credentials for PowerProtect Data Manager
+    
+    .DESCRIPTION
+    Creates a new set of credentials for PowerProtect Data Manager
+
+    .PARAMETER Body
+    An object representing the request body for a protection engine deployment
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # CREATES A NEW SET OF CREDENTIALS
+
+    PS> $Credentials = new-dmcredential -Body $Body
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/post
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+    )
+    begin {}
+    process {
+
+        # GET A CERTIFICATE
+        $Endpoint = "credentials"
+        
+        $Action = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 10) `
+        -SkipCertificateCheck
+
+        return $Action
+    }
+}
+
 Export-ModuleMember -Function *

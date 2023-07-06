@@ -56,3 +56,4 @@ Cliff Rodriguez
 | Example-20  | Deploy a protection engine                                               | VMWARE      | Config   |
 | Example-21  | Get credentials based on filters                                         | ANY         | Query    |
 | Example-22  | Set custom disk exclusions per asset                                     | VMWARE      | Config   |
+| Example-23  | Create new credentials                                                   | ANY         | Config   |
