@@ -1393,7 +1393,6 @@ function new-dmcredential {
 
     .EXAMPLE
     PS> # CREATES A NEW SET OF CREDENTIALS
-
     PS> $Credentials = new-dmcredential -Body $Body
 
     .LINK
@@ -1410,6 +1409,66 @@ function new-dmcredential {
 
         # GET A CERTIFICATE
         $Endpoint = "credentials"
+        
+        $Action = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method POST `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -Body ($Body | convertto-json -Depth 10) `
+        -SkipCertificateCheck
+
+        return $Action
+    }
+}
+
+function new-dmsearchnode {
+<#
+    .SYNOPSIS
+    Deploy a new PowerProtect Data Manager Search Node
+    
+    .DESCRIPTION
+    Deploy a new PowerProtect Data Manager Search Node
+
+    .PARAMETER Id
+    A string representing the search node id
+
+    .PARAMETER Body
+    An object representing the request body for a search node deployment
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # DEPLOY A SEARCH NODE
+    PS> $SearchNode = new-dmsearchnode -Body $Body
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters/get
+
+    .LINK
+    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters~1%7Bid%7D~1nodes/post
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory=$true)]
+        [object]$Body
+    )
+    begin {}
+    process {
+
+        # GET THE SEARCH NODE ID
+        $Endpoint = "search-clusters"
+        $Query = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        -Method GET `
+        -ContentType 'application/json' `
+        -Headers ($AuthObject.token) `
+        -SkipCertificateCheck
+
+        $Id = ($Query.content | where-object {$_.name -eq "Search"}).id
+
+        # DEPLOY A NEW SEARCH NODE
+        $Endpoint = "search-clusters/$($Id)/nodes"
         
         $Action = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
         -Method POST `
