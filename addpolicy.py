@@ -6,10 +6,12 @@ import urllib3
 import sys
 import json
 import uuid
-import time
 from datetime import date
-    
-# The purpose of this script is to simplify Policy creation in PowerProtect
+
+# The purpose of this script is to simplify policy creation in PowerProtect
+# Examples:
+# python addpolicy.py -s 10.0.0.1 -usr admin -pwd "myPassword!" -a list
+# python addpolicy.py -s 10.0.0.1 -usr admin -pwd "myPassword!" -a create -n VMpolicy1 -asset prodVM1 -storagename DD1 -freq daily -stime 11:00:00 -d 4 -ret "1 days"
 
 urllib3.disable_warnings()
 
@@ -23,7 +25,7 @@ def get_args():
                         default='admin', help='User')
     parser.add_argument('-pwd', '--password', required=True, action='store',
                         help='Password')
-    parser.add_argument('-a', '--action', required=True, choices=['list', 'create'],
+    parser.add_argument('-a', '--action', required=True, choices=['list', 'list-raw', 'create'],
                         help='Choose to list all Policies or to create a new Policy')
     parser.add_argument('-n', '--name', required='create' in sys.argv, action='store', default=None,
                         help='Name of Policy')
@@ -55,7 +57,7 @@ def get_args():
     return args
 
 def authenticate(ppdm, user, password, uri):
-    # Login
+    # Logins into PowerProtect Data Manager
     suffixurl = "/login"
     uri += suffixurl
     headers = {'Content-Type': 'application/json'}
@@ -80,7 +82,7 @@ def authenticate(ppdm, user, password, uri):
     return token
 
 def get_policy(uri, token):
-    # Get configured Policies
+    # Get configured policies
     suffixurl = "/protection-policies"
     uri += suffixurl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
@@ -90,6 +92,13 @@ def get_policy(uri, token):
     except requests.exceptions.RequestException as err:
         print("The call {}{} failed with exception:{}".format(response.request.method, response.url, err))
     return response.json()['content']
+
+def check_policy(policies, name):
+    # Check if a policy exists by name
+    for policy in policies:
+        if (name == policy["name"]):
+            return True
+    return False
 
 def get_asset(uri, token, name, id):
     # Get protected VMs
@@ -149,21 +158,21 @@ def build_schedule(freq, starttime, interval, duration, weekdays, daymonth):
     if freq.lower() == 'hourly':
         schedule['frequency'] = 'HOURLY'
         schedule['interval'] = interval
-        schedule['starttime'] = '{}T{}Z'.format(cdate, starttime)
+        schedule['startTime'] = '{}T{}Z'.format(cdate, starttime)
         schedule['duration'] = 'PT{}H'.format(duration)
     elif freq.lower() == 'daily':
         schedule['frequency'] = 'DAILY'
-        schedule['starttime'] = '{}T{}Z'.format(cdate, starttime)
+        schedule['startTime'] = '{}T{}Z'.format(cdate, starttime)
         schedule['duration'] = 'PT{}H'.format(duration)
     elif freq.lower() == 'weekly':
         schedule['frequency'] = 'WEEKLY'
-        schedule['starttime'] = '{}T{}Z'.format(cdate, starttime)
+        schedule['startTime'] = '{}T{}Z'.format(cdate, starttime)
         schedule['duration'] = 'PT{}H'.format(duration)
         schedule['weekDays'] = str(weekdays).upper()
     elif freq.lower() == 'monthly':
         schedule['frequency'] = 'MONTHLY'
         schedule['dayOfMonth'] = daymonth
-        schedule['starttime'] = '{}T{}Z'.format(cdate, starttime)
+        schedule['startTime'] = '{}T{}Z'.format(cdate, starttime)
         schedule['duration'] = 'PT{}H'.format(duration)
     return schedule
 
@@ -191,7 +200,7 @@ def build_retention(retention):
     return retentionj
 
 def build_policy_json(name, schedule, retention, storageid):
-    # Builds the Policy JSON
+    # Builds the policy JSON
     priority = 1
     stagetype = "AUTO_FULL"
     policy = {}
@@ -220,7 +229,7 @@ def build_policy_json(name, schedule, retention, storageid):
     return json.dumps(policy)
 
 def create_policy(uri, token, policyjson):
-    # Create Policy based on the previously built JSON
+    # Create policy based on the policy JSON
     suffixurl = "/protection-policies"
     uri += suffixurl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
@@ -259,7 +268,7 @@ def get_asset(uri, token, asset, id):
     return response.json()['content']
 
 def assign_asset(uri, token, id, policyid):
-    # Assigns the asset to the Policy
+    # Assigns the asset to the policy
     suffixurl = "/protection-policies/{}/asset-assignments".format(policyid)
     uri += suffixurl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
@@ -275,7 +284,7 @@ def assign_asset(uri, token, id, policyid):
     return None
 
 def logout(ppdm, user, uri, token):
-    # Logs out of PowerProtect
+    # Logs out of PowerProtect Data Manager
     suffixurl = "/logout"
     uri += suffixurl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
@@ -299,18 +308,21 @@ def main():
     duration, weekdays, daymonth, retention = args.duration, args.weekdays, args.daymonth, args.retention
     uri = "https://{}:{}{}".format(ppdm, port, apiendpoint)
     token = authenticate(ppdm, user, password, uri)
-    if action == 'list':
-        policies = get_policy(uri, token)
-        for policy in policies:
-            print("---------------------------------------------------------")
-            print("Policy Name:", policy["name"])
-            print("Policy ID:", policy["id"])
-            print("Policy Type:", policy["assetType"])
-            print("Policy State:", policy["type"])
-            print("Policy Enabled:", policy["enabled"])
-            print("Number of Assets:", policy["summary"]["numberOfAssets"])
-            print("Number of Stages:", len(policy["stages"]))
-            print()
+    policies = get_policy(uri, token)
+    if action == 'list' or action == 'list-raw':
+        if action == 'list-raw':
+            print(json.dumps(policies, indent=4))
+        else:
+            for policy in policies:
+                print("---------------------------------------------------------")
+                print("Policy Name:", policy["name"])
+                print("Policy ID:", policy["id"])
+                print("Policy Type:", policy["assetType"])
+                print("Policy State:", policy["type"])
+                print("Policy Enabled:", policy["enabled"])
+                print("Number of Assets:", policy["summary"]["numberOfAssets"])
+                print("Number of Stages:", len(policy["stages"]))
+                print()
     else:
         if (asset is None and id is None):
             print("Please specify either asset name or ID")
@@ -336,6 +348,9 @@ def main():
             print("Narrow down the results using the --storagename and --storageid paramaters")
             sys.exit(5)
         storageid = storagelist[0]['id']
+        if check_policy(policies, name):
+            print("Policy {} already exists, pick a different name".format(name))
+            sys.exit(5)
         schedule = build_schedule(freq, starttime, interval, duration, weekdays, daymonth)
         retention = build_retention(retention)
         policyjson = build_policy_json(name, schedule, retention, storageid)
