@@ -1,5 +1,5 @@
 # powerprotect-automation
-# Dell EMC PowerProtect - Common Flows
+# Dell PowerProtect - Common Flows
 This repository contains Python scripts for common flows in Dell EMC PowerProtect
 ## Authors
 - **Idan Kentor** - [Dell Technologies](https://www.dell.com)
