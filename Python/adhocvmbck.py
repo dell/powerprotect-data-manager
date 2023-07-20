@@ -8,6 +8,9 @@ import json
 import time
 
 # The purpose of this script is to facilitate ad-hoc VM backup in PowerProtect
+# python adhocvmbck.py -s 10.0.0.1 -usr admin -pwd "myPassword!" -a list
+# python adhocvmbck.py -s 10.0.0.1 -usr admin -pwd "myPassword!" -a backup -n VM1
+# python adhocvmbck.py -s 10.0.0.1 -usr admin -pwd "myPassword!" -a backup -n VM2 -ret "1 day" -full
 
 urllib3.disable_warnings()
 
@@ -21,7 +24,7 @@ def get_args():
                         default='admin', help='User')
     parser.add_argument('-pwd', '--password', required=True, action='store',
                         help='Password')
-    parser.add_argument('-a', '--action', required=True, choices=['list', 'backup', 'monitor'],
+    parser.add_argument('-a', '--action', required=True, choices=['list', 'backup', 'monitor', 'list-raw'],
                         help='Choose to list all protected VMs or ad-hoc backup a VM')
     parser.add_argument('-n', '--name', required=('backup' in sys.argv and '-id' not in sys.argv),
                         action='store', default=None,
@@ -34,6 +37,8 @@ def get_args():
                         help='Optionally provide the Asset ID to monitor')
     parser.add_argument('-full', '--full', required=False, action='store_true',
                         default=False, help='Optionally force full VM backup')
+    parser.add_argument('-ret', '--retention', action='store',
+                        help='Optionally specify retention in either day, week or month units')
     parser.add_argument('-nmonitor', '--no-monitor', required=False, action='store_true', dest='nmonitor',
                         default=False, help='Optionally prevents monitoring of backup process')
     parser.add_argument('-aidfile', '--activity-id-file', required=('monitor' in sys.argv and '-activity_id' not in sys.argv),
@@ -90,33 +95,83 @@ def get_asset(uri, token, name, id):
 				uri, response.status_code, response.text))
     return response.json()['content']
 
-def adhoc_backup(uri, token, id, full):
-    # Performs ad-hoc backup of a VM by name or ID
-    suffixurl = "/asset-backups"
-    uri += suffixurl
+def extract_stageId(uri, token, protectionPolicyId):
+    # Finds the protection stage ID of a given protection policy
+    suffixUrl = "/protection-policies/{}".format(protectionPolicyId)
+    uri += suffixUrl
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
-    if not full:
-        backuptype = "FULL"
-    else:
-        backuptype = "AUTO_FULL"
-    payload = json.dumps({
-        'assetId' : '{}'.format(id),
-		'backupType' : backuptype
-		})
     try:
-        response = requests.post(uri, data=payload, headers=headers, verify=False)
+        response = requests.get(uri, headers=headers, verify=False)
         response.raise_for_status()
     except requests.exceptions.RequestException as err:
         print("The call {} {} failed with exception:{}".format(response.request.method, response.url, err))
     if response.status_code not in [200, 201, 202]:
         print('Failed to run ad-hoc backup on asset ID {}, code: {}, body: {}'.format(
 				id, response.status_code, response.text))
-    if 'activityId' in response.json():
-        return response.json()['activityId']
-    if 'taskId' in response.json():
-        return response.json()['taskId']
-    if 'jobId' in response.json():
-        return response.json()['jobId']
+    for stage in response.json()["stages"]:
+        if stage["type"] == "PROTECTION":
+            return stage["id"]
+
+def build_retention(retention):
+    # Builds the retention JSON
+    retLock = False
+    retList = retention.split(' ')
+    if not retList[0].isdigit():
+        print("Please specify retention in the format of 'number UNIT'")
+        print("For example: 5 days")
+        sys.exit(5)
+    if len(retList) > 2:
+        print("Please specify retention in the format of 'number UNIT'")
+        print("For example: 5 days")
+        sys.exit(5)
+    if retList[1][-1] == 's':
+        retList[1] = retList[1][:-1]
+    if retList[1].lower() not in ['day', 'week', 'month']:
+        print("Please specify retention in the format of 'number UNIT'")
+        print("For example: 5 days")
+        print(retList[1])
+        sys.exit(5)
+    retentionj = {}
+    retentionj['interval'] = retList[0]
+    retentionj['unit'] = retList[1].upper()
+    retentionj['storageSystemRetentionLock'] = retLock
+    return retentionj
+
+def build_protection_payload(assetId, stageId, retention, backupType):
+    # Builds the required payload for the adhoc protection call
+    protectionPayload = {}
+    protectionPayload["assetIds"] = [assetId]
+    protectionPayload["stages"] = [None]
+    protectionPayload["stages"][0] = {}
+    protectionPayload["stages"][0]["id"] = stageId
+    if retention:
+        retention = build_retention(retention)
+        protectionPayload["stages"][0]["retention"] = retention
+    protectionPayload["stages"][0]["operations"] = [None]
+    protectionPayload["stages"][0]["operations"][0] = {}
+    if backupType:
+        protectionPayload["stages"][0]["operations"][0]["backupType"] = "FULL"
+    else:
+        protectionPayload["stages"][0]["operations"][0]["backupType"] = "SYNTHETIC_FULL"
+    return json.dumps(protectionPayload)
+
+def adhoc_backup(uri, token, protectionPolicyId, protectionPayload):
+    # Performs ad-hoc backup of a VM by name or ID
+    suffixurl = "/protection-policies/{}/protections".format(protectionPolicyId)
+    uri += suffixurl
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(token)}
+    try:
+        response = requests.post(uri, data=protectionPayload, headers=headers, verify=False)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as err:
+        print("The call {} {} failed with exception:{}".format(response.request.method, response.url, err))
+    if response.status_code not in [200, 201, 202]:
+        print('Failed to run ad-hoc backup, code: {}, body: {}'.format(
+				response.status_code, response.text))
+    try:
+        return response.json()["results"][0]["activityId"]
+    except KeyError:
+        next
     return None
 
 def monitor_activity(uri, token, activityid):
@@ -164,8 +219,9 @@ def main():
     port = "8443"
     apiendpoint = "/api/v2"
     args = get_args()
-    ppdm, user, password, action, name, id = args.server, args.user, args.password, args.action, args.name, args.id
-    full, nmonitor, aid, aidfile, outfile = args.full, args.nmonitor, args.activity_id, args.aidfile, args.outfile
+    ppdm, user, password, action = args.server, args.user, args.password, args.action
+    name, id, isFull, retention = args.name, args.id, args.full, args.retention
+    nmonitor, aid, aidfile, outfile = args.nmonitor, args.activity_id, args.aidfile, args.outfile
     uri = "https://{}:{}{}".format(ppdm, port, apiendpoint)
     token = authenticate(ppdm, user, password, uri)
     if (action == 'monitor'):
@@ -186,23 +242,29 @@ def main():
                 print("Asset Type:", asset["type"])
                 print("Last Backup Time:", asset["lastAvailableCopyTime"])
                 print()
+        elif (action == 'list-raw'):
+            print(json.dumps(vms, indent=4))
         elif (len(vms) > 1):
             print ("VM Name {} yielded in more than 1 result".format(name))
             print("Narrow down the results using the --action list paramater")
         elif (len(vms) == 1):
             print("Performing Ad-hoc backup for VM", vms[0]["name"])
-            activityid = adhoc_backup(uri, token, vms[0]["id"], full)
-            if (activityid is None):
+            protectionPolicyId = vms[0]["protectionPolicyId"]
+            assetId = vms[0]["id"]
+            stageId = extract_stageId(uri, token, protectionPolicyId)
+            protectionPayload = build_protection_payload(assetId, stageId, retention, isFull)
+            activityId = adhoc_backup(uri, token, protectionPolicyId, protectionPayload)
+            if (activityId is None):
                 next
             elif (not nmonitor):
-                monitor_activity(uri, token, activityid)
+                monitor_activity(uri, token, activityId)
             else:
-                print("Activity ID:", activityid)
+                print("Activity ID:", activityId)
                 if (outfile is not None):
                     file = open(outfile, 'w')
-                    file.write(activityid)
+                    file.write(activityId)
                     file.close()
-                    print("Activity ID logged to file",outfile)
+                    print("Activity ID logged to file", outfile)
     logout(ppdm, user, uri, token)
 
 if __name__ == "__main__":
