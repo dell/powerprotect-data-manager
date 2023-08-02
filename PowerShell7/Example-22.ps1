@@ -6,11 +6,6 @@
 Import-Module .\dell.ppdm.psm1 -Force
 $Server = "ppdm-01.vcorp.local"
 $PageSize = 100
-
-<#
-    PLEASE NOTE:
-    HARD DISK 1 IS ALWAYS SET TO EXCLUDE = $false BY THE set-dmdiskexclusions CMDLET
-#>
 $Config = @(
     @{
         name = "vc1-win-01"

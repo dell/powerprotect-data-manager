@@ -22,7 +22,7 @@ function connect-dmapi {
     PS> connect-ppdmapi -Server 'ppdm-01.vcorp.local'
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/docs/getting%20started/authentication-and-authorization.md
+    https://developer.dell.com/apis/4378/versions/19.14.0/docs/getting%20started/authentication-and-authorization.md
 
 #>
     [CmdletBinding()]
@@ -81,7 +81,7 @@ function disconnect-dmapi {
     PS> disconnect-dmapi
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/docs/getting%20started/authentication-and-authorization.md
+    https://developer.dell.com/apis/4378/versions/19.14.0/docs/getting%20started/authentication-and-authorization.md
 
 #>
     [CmdletBinding()]
@@ -129,7 +129,7 @@ function get-dmassets {
     PS> $Assets = get-dmassets -PageSize $PageSize
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets/get
 
 #>
     [CmdletBinding()]
@@ -214,7 +214,7 @@ function get-dmactivities {
     PS> $Activities = get-dmactivities -PageSize $PageSize
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities/get
 
 #>
     [CmdletBinding()]
@@ -292,7 +292,7 @@ function get-dmalerts {
     PS> $Alerts = get-dmalerts -PageSize $PageSize
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1alerts/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1alerts/get
 
 #>
     [CmdletBinding()]
@@ -474,7 +474,7 @@ function get-dmstoragesystems {
     PS>  $Storage = get-dmstoragesystems -Filters $Filters -PageSize 100
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1storage-systems/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1storage-systems/get
 
 #>
     [CmdletBinding()]
@@ -535,7 +535,7 @@ function new-dmbackup {
     PS> $Backup = new-dmbackup -Clients $Clients -Policy $Policy -PageSize 100
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies~1%7Bid%7D~1protections/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies~1%7Bid%7D~1protections/post
 
 #>
     [CmdletBinding()]
@@ -608,7 +608,7 @@ function get-dmprotectionpolicies {
     PS>  $Policy = get-dmprotectionpolicies -Filters $Filters -PageSize 100
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies/get
 
 #>
     [CmdletBinding()]
@@ -661,7 +661,7 @@ function new-dmprotectionpolicy {
     PS>  $Policy = new-dmprotectionpolicy -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-policies/post
 
 #>
     [CmdletBinding()]
@@ -711,7 +711,7 @@ function get-dmlatestcopies {
     PS>  $Copy = get-dmlatestcopies -Filters $Filters -PageSize 100
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1latest-copies/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1latest-copies/get
 
 #>
     [CmdletBinding()]
@@ -808,7 +808,7 @@ function new-dmrecover {
     PS>  $Recover = new-dmrecover -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1restored-copies/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1restored-copies/post
 
 #>
     [CmdletBinding()]
@@ -852,7 +852,7 @@ function new-dmmonitor {
     PS>  $Recover = new-dmrecover -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities~1%7Bid%7D/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities~1%7Bid%7D/get
 
 #>
     [CmdletBinding()]
@@ -910,7 +910,7 @@ function get-dmexportedcopies {
     PS> $Ia = get-dmexportedcopies -Filters $Filters
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1exported-copies/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1exported-copies/get
 
 #>
     [CmdletBinding()]
@@ -962,7 +962,7 @@ function new-dmvmotion {
     PS> $Vmotion = new-dmvmotion -Ia $Ia.restoredCopyId -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1restored-copies~1%7Bid%7D~1vmotion/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1restored-copies~1%7Bid%7D~1vmotion/post
 
 #>
     [CmdletBinding()]
@@ -1015,7 +1015,7 @@ function get-dmagentregistration {
     PS> $agent = get-dmagentregistration -Filters $Filters
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1agent-registration-status/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1agent-registration-status/get
 
 #>
     [CmdletBinding()]
@@ -1073,7 +1073,7 @@ function get-dmcertificates {
     PS> $Certificate = get-dmcertificates -Path $Path
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1certificates/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1certificates/get
 
 #>
     [CmdletBinding()]
@@ -1127,7 +1127,7 @@ function get-dmengines {
     PS> $Pe = get-dmengines -Filters $Filters
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-engines/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1protection-engines/get
 
 #>
     [CmdletBinding()]
@@ -1181,7 +1181,7 @@ function new-dmengine {
     PS> $Engine = new-dmengine -Id $Pe.id -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1certificates/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1certificates/get
 
 #>
     [CmdletBinding()]
@@ -1234,7 +1234,7 @@ function get-dmcredentials {
     PS>  $Credentials = get-dmcredentials -PageSize $PageSize
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/get
 
 #>
     [CmdletBinding()]
@@ -1310,7 +1310,7 @@ function set-dmdiskexclusions {
     PS> set-dmdiskexclusions -Asset $Asset -Config $_.disks
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets~1%7Bid%7D/patch
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1assets~1%7Bid%7D/patch
 
 #>
     [CmdletBinding()]
@@ -1396,7 +1396,7 @@ function new-dmcredential {
     PS> $Credentials = new-dmcredential -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1credentials/post
 
 #>
     [CmdletBinding()]
@@ -1443,10 +1443,10 @@ function new-dmsearchnode {
     PS> $SearchNode = new-dmsearchnode -Body $Body
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters/get
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters~1%7Bid%7D~1nodes/post
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1search-clusters~1%7Bid%7D~1nodes/post
 
 #>
     [CmdletBinding()]
@@ -1511,7 +1511,7 @@ function get-dmauditlogs {
     PS> $Audit = get-dmauditlogs -PageSize $PageSize
 
     .LINK
-    https://developer.dell.com/apis/4378/versions/19.13.0/reference/ppdm-public.yaml/paths/~1api~1v2~1audit-logs/get
+    https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1audit-logs/get
 
 #>
     [CmdletBinding()]

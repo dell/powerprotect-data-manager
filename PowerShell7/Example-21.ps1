@@ -7,7 +7,7 @@ Import-Module .\dell.ppdm.psm1 -Force
 
 # VARS
 $Server = "ppdm-01.vcorp.local"
-$PageSize = 100
+$PageSize = 1
 
 # CONNECT THE THE REST API
 connect-dmapi -Server $Server
