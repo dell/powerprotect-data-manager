@@ -4,7 +4,7 @@ Cliff Rodriguez
   * [Dell Technoligies](https://www.dell.com/en-us)
   * [LinkedIn](https://www.linkedin.com/in/cliff-rodriguez-6673422b/)
 # Supported Platforms
-* PowerProtect Data Manager 19.13
+* PowerProtect Data Manager 19.14
 # Prerequisites
 * PowerShell 7.(latest) - [github](https://github.com/PowerShell/powershell/releases)
 # Conventions
