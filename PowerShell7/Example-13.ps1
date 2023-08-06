@@ -54,6 +54,7 @@ $Body = [ordered]@{
                 vm = [ordered]@{
                     excludeSwapFiles = $false
                     disableQuiescing = $true
+                    dataMoverType = "VADP"
                 }
                 protection = [ordered]@{
                     backupMode = "FSS"

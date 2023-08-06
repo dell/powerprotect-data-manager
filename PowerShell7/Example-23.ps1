@@ -19,7 +19,7 @@ $Body = [ordered]@{
     type="OS"
     username="$($Credential.username)"
     password="$(ConvertFrom-SecureString -SecureString $Credential.password -AsPlainText)"
-    name="Linux2"
+    name="Linux"
 }
 
 # CREATE THE NEW CREDENTIALS

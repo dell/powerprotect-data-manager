@@ -13,7 +13,7 @@ $PageSize = 100
 connect-dmapi -Server $Server
 
 $Filters = @(
-    "name eq `"vc1-ubu-01`""
+    "name eq `"win-iis-01`""
 )
 # GET ASSETS BASED ON FILTERS
 $Asset = get-dmassets -Filters $Filters -PageSize $PageSize

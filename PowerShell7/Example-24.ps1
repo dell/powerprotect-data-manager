@@ -15,8 +15,8 @@ $EsxName = "esx-physical-01.vcorp.local"
 $DS = "Unity7496-DS-01"
 
 # SEARCH NODE
-$HostName = "ppdm01-sn01.vcorp.local"
-$IpAddress = "192.168.3.247"
+$HostName = "ppdm-01-search-01.vcorp.local"
+$IpAddress = "192.168.3.53"
 $Dns = "192.168.1.11"
 $Gateway = "192.168.1.250"
 $Netmask = "255.255.252.0"

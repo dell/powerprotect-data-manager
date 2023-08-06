@@ -9,7 +9,7 @@ Import-Module .\dell.ppdm.psm1 -Force
 $Server = "ppdm-01.vcorp.local"
 $PageSize = 100
 
-$VmName = "vc1-ubu-01"
+$VmName = "win-iis-01"
 $VcenterName = "vc-01.vcorp.local"
 $DcName = "DC01-VC01"
 $FolderName = "Recover"
@@ -75,7 +75,7 @@ $Filters = @(
     "and parentId eq `"$($Cluster.id)`""
 )
 $Pool = get-dmvirtualcontainers -Filters $Filters -PageSize $PageSize | `
-where-object {$_.name -eq "Web"}
+where-object {$_.name -eq "$($PoolName)"}
 $PoolMoRef = $Pool.id -split ':' | select-object -last 1
 
 # GET AN ESX HOST
