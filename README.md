@@ -12,6 +12,6 @@ This repository contains Python scripts for common flows in Dell EMC PowerProtec
 ## Documentation
 - See the help page of each script (i.e assetmgmt.py -h)
 - PowerProtect RESTAPI Documentation - [Dell Technologies API Explorer](https://developer.dell.com)
-- PowerProtect Documentation - [Dell EMC Online Support](https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information?lang=en)
+- PowerProtect Documentation - [Dell Online Support](https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information?lang=en)
 
 
