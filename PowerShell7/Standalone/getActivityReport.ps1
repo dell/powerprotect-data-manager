@@ -11,8 +11,9 @@
         I HAD TO DROP THIS ASSEMBLY IN THE SCRIPT FOLDER FROM HERE:
         C:\Program Files\Microsoft Office\root\vfs\ProgramFilesX86\Microsoft Office\Office16\DCF
 #>
-
 Add-Type -AssemblyName Microsoft.Office.Interop.Excel
+# .NET ASSEMPLY FOR IMAGES
+Add-Type -AssemblyName System.Drawing
 
 # GLOBAL VARS
 $global:ApiVersion = 'v2'
@@ -21,15 +22,32 @@ $global:AuthObject = $null
 
 # VARS
 $Servers = @(
-    "myfakehost.vcorp.local"
     "10.239.100.131"
 )
 $Retires = @(1..5)
 $Seconds = 10
 $PageSize = 100
+
+# REPORT OPTIONS
 $ReportName = "ActivityReport"
-$OutPath = "C:\Reports"
-$OutFile = "$($OutPath)\$((Get-Date).ToString('yyyy-MM-dd'))-$($ReportName).xlsx"
+$ReportOutPath = "C:\Reports\output"
+$ReportOutFile = "$($ReportOutPath)\$((Get-Date).ToString('yyyy-MM-dd'))-$($ReportName).xlsx"
+# WHAT ROW TO START THE DATA ON
+$HeaderRow = 7
+<#
+    SCALE THE RENDERED PDF DOWN TO $Zoom
+    SO IT WILL FIT WITHDH WISE ON THE PAGE
+#>
+$Zoom = 25
+# VALUES: PORTRIAIT = 1, LANDSCAPE = 2
+$Orientation = 2
+
+# LOGO
+$LogoPath = "C:\Reports\logo.png"
+
+# SCALE TO SIZE
+$LogoScale = .28
+
 <#
     ENUMERATIONS FOR THE TABLE STYLES CAN BE FOUND HERE:
         https://learn.microsoft.com/en-us/javascript/api/excel/excel.builtintablestyle?view=excel-js-preview
@@ -44,7 +62,8 @@ $Date = (Get-Date).AddDays(-1)
 $Filters = @(
     "classType eq `"JOB`""
     "and category eq `"PROTECT`""
-    "and startTime ge `"$($Date.ToString('yyyy-MM-dd'))T00:00:00.000Z`""
+    "and startTime ge `"$($Date.ToString('yyyy-MM-ddThh:mm:ss.fffZ'))`""
+    # "and asset.name eq `"ORAPROD`""
 )
 
 function connect-dmapi {
@@ -383,6 +402,77 @@ function get-dmmtrees {
 
     } # END PROCESS
 }
+Function Convert-BytesToSize
+{
+<#
+    .SYNOPSIS
+    Converts any integer size given to a user friendly size.
+    
+    .DESCRIPTION
+    Converts any integer size given to a user friendly size.
+
+    .PARAMETER size
+    Used to convert into a more readable format.
+    Required Parameter
+
+    .EXAMPLE
+    Convert-BytesToSize -Size 134217728
+    Converts size to show 128MB
+
+    .LINK
+    https://learn-powershell.net/2010/08/29/convert-bytes-to-highest-available-unit/
+    #>
+
+
+#Requires -version 2.0
+
+
+[CmdletBinding()]
+Param
+(
+    [parameter(Mandatory=$false,Position=0)][int64]$Size
+
+)
+
+# DETERMINE SIZE IN BASE2
+Switch ($Size)
+{
+    {$Size -gt 1PB}
+    {
+        $NewSize = “$([math]::Round(($Size /1PB),1))PB”
+        Break;
+    }
+    {$Size -gt 1TB}
+    {
+        $NewSize = “$([math]::Round(($Size /1TB),1))TB”
+        Break;
+    }
+    {$Size -gt 1GB}
+    {
+        $NewSize = “$([math]::Round(($Size /1GB),1))GB”
+        Break;
+    }
+    {$Size -gt 1MB}
+    {
+        $NewSize = “$([math]::Round(($Size /1MB),1))MB”
+        Break;
+    }
+    {$Size -gt 1KB}
+    {
+        $NewSize = “$([math]::Round(($Size /1KB),1))KB”
+        Break;
+    }
+    Default
+    {
+        $NewSize = “$([math]::Round($Size,2))Bytes”
+        Break;
+    }
+}
+Return $NewSize
+
+}
+
+
 # ITERATE OVER THE PPDM HOSTS
 $Activities = @()
 $Servers | ForEach-Object { 
@@ -399,30 +489,31 @@ $Servers | ForEach-Object {
             # QUERY FOR POLICIES
             $Policies = get-dmprotectionpolicies -PageSize $PageSize
 
-            foreach($Item in $Query) {
-                $Policy = $Policies | Where-Object {$_.id -eq $Item.protectionPolicy.id}
+            foreach($Record in $Query) {
+                $Policy = $Policies | Where-Object {$_.id -eq $Record.protectionPolicy.id}
                 $Protection = $Policy.stages | where-object {$_.type -eq "PROTECTION"}
                 $Replication = $Policy.stages | where-object {$_.type -eq "REPLICATION"}
                 $storageMtree = $Mtrees | Where-Object {$_.id -eq $Protection.target.dataTargetId}
                 $replicationMtree = $Mtrees | Where-Object {$_.id -eq $Replication.target.dataTargetId}
-        
+                $timeSpan = New-TimeSpan -Milliseconds $Record.duration
+
                 $Object = [ordered]@{
-                    assetName = $Item.asset.name
-                    assetType = $Item.asset.type
-                    jobId = $Item.id
+                    assetName = $Record.asset.name
+                    assetType = $Record.asset.type
+                    jobId = $Record.id
                     ppdmServer = $_
-                    policyName = $Item.protectionPolicy.name
-                    scheduleType = $Protection.operations.schedule.frequency
-                    startTime = $Item.startTime
-                    endTime = $Item.endTime
-                    duration = $Item.duration
-                    nextScheduledTime = $Item.nextScheduledTime
-                    jobStatus = $Item.result.status
-                    assetSize = $Item.stats.assetSizeInBytes
-                    bytesTransferred = $Item.stats.bytesTransferredThroughput
-                    storageTarget = "$($Item.storageSystem.name)/$($storageMtree.name)"
+                    policyName = $Record.protectionPolicy.name
+                    scheduleType = $Record.scheduleInfo.type
+                    startTime = $Record.startTime
+                    endTime = $Record.endTime
+                    duration = "{0:dd}d:{0:hh}h:{0:mm}m:{0:ss}s" -f $timeSpan
+                    nextScheduledTime = $Record.nextScheduledTime
+                    jobStatus = $Record.result.status
+                    assetSize = Convert-BytesToSize -Size $Record.stats.assetSizeInBytes
+                    bytesTransferred = Convert-BytesToSize -Size $Record.stats.bytesTransferred
+                    storageTarget = "$($Record.storageSystem.name)/$($storageMtree.name)"
                     replicationTarget = "$($replicationMtree._embedded.storageSystem.name)/$($replicationMtree.name)"
-                    hostName = $Item.host.name
+                    hostName = $Record.host.name
 
                 }
 
@@ -459,51 +550,63 @@ $Worksheet = $Workbook.Worksheets.Item(1)
 # ADD A NAME TO THE FIRST WORKSHEET
 $Worksheet.Name = "Activities"
 
-# DEFINE THE HEADER ROW (row, column)
-$Excel.cells.item(1,1) = "row"
-$Excel.cells.item(1,2) = "assetName"
-$Excel.cells.item(1,3) = "assetType"
-$Excel.cells.item(1,4) = "jobId"
-$Excel.cells.item(1,5) = "ppdmServer"
-$Excel.cells.item(1,6) = "policyName"
-$Excel.cells.item(1,7) = "scheduleType"
-$Excel.cells.item(1,8) = "startTime"
-$Excel.cells.item(1,9) = "endTime"
-$Excel.cells.item(1,10) = "duration (ms)"
-$Excel.cells.item(1,11) = "nextScheduledTime"
-$Excel.cells.item(1,12) = "jobStatus"
-$Excel.cells.item(1,13) = "assetSize"
-$Excel.cells.item(1,14) = "bytesTransferred"
-$Excel.cells.item(1,15) = "storageTarget"
-$Excel.cells.item(1,16) = "replicationTarget"
+# LOGO PROPERTIES
+$Logo = New-Object System.Drawing.Bitmap $LogoPath
 
-for($i=0;$i -lt $Activities.count; $i++) {
+# ADD IMAGE TO THE FIRST WORKSHEET
+$Logo = New-Object System.Drawing.Bitmap $LogoPath
+$Worksheet.Shapes.AddPicture("$($LogoPath)",1,0,0,0,$Logo.Width*$LogoScale,$Logo.Height*$LogoScale) `
+| Out-Null
+
+# DEFINE THE HEADER ROW (row, column)
+$Excel.cells.item($HeaderRow,1) = "row"
+$Excel.cells.item($HeaderRow,2) = "hostName"
+$Excel.cells.item($HeaderRow,3) = "assetName"
+$Excel.cells.item($HeaderRow,4) = "assetType"
+$Excel.cells.item($HeaderRow,5) = "jobId"
+$Excel.cells.item($HeaderRow,6) = "ppdmServer"
+$Excel.cells.item($HeaderRow,7) = "policyName"
+$Excel.cells.item($HeaderRow,8) = "scheduleType"
+$Excel.cells.item($HeaderRow,9) = "startTime"
+$Excel.cells.item($HeaderRow,10) = "endTime"
+$Excel.cells.item($HeaderRow,11) = "duration (dd:hh:mm:ss)"
+$Excel.cells.item($HeaderRow,12) = "nextScheduledTime"
+$Excel.cells.item($HeaderRow,13) = "jobStatus"
+$Excel.cells.item($HeaderRow,14) = "assetSize"
+$Excel.cells.item($HeaderRow,15) = "bytesTransferred"
+$Excel.cells.item($HeaderRow,16) = "storageTarget"
+$Excel.cells.item($HeaderRow,17) = "replicationTarget"
+
+for($i=0;$i -lt $Activities.length; $i++) {
 
     Write-Progress -Activity "Processing records..." `
-    -Status "$($i-1) of $($Activities.count) - $([math]::round((($i/$Activities.count)*100),2))% " `
-    -PercentComplete (($i/$Activities.count)*100)
+    -Status "$($i-1) of $($Activities.length) - $([math]::round((($i/$Activities.length)*100),2))% " `
+    -PercentComplete (($i/$Activities.length)*100)
     
-    $Excel.cells.item($i+2,1) = $i+1
-    $Excel.cells.item($i+2,2) = $Activities[$i].assetName
-    $Excel.cells.item($i+2,3) = $Activities[$i].assetType
-    $Excel.cells.item($i+2,4) = $Activities[$i].jobId
-    $Excel.cells.item($i+2,5) = $Activities[$i].ppdmServer
-    $Excel.cells.item($i+2,6) = $Activities[$i].policyName
-    $Excel.cells.item($i+2,7) = $Activities[$i].scheduleType -join ','
-    $Excel.cells.item($i+2,8) = $Activities[$i].startTime
-    $Excel.cells.item($i+2,9) = $Activities[$i].endTime
-    $Excel.cells.item($i+2,10) = $Activities[$i].duration
-    $Excel.cells.item($i+2,11) = $Activities[$i].nextScheduledTime
+    # SET THE ROW OFFSET
+    $RowOffSet = $HeaderRow+1+$i
+    $Excel.cells.item($RowOffSet,1) = $i+1
+    $Excel.cells.item($RowOffSet,2) = $Activities[$i].hostName
+    $Excel.cells.item($RowOffSet,3) = $Activities[$i].assetName
+    $Excel.cells.item($RowOffSet,4) = $Activities[$i].assetType
+    $Excel.cells.item($RowOffSet,5) = $Activities[$i].jobId
+    $Excel.cells.item($RowOffSet,6) = $Activities[$i].ppdmServer
+    $Excel.cells.item($RowOffSet,7) = $Activities[$i].policyName
+    $Excel.cells.item($RowOffSet,8) = $Activities[$i].scheduleType -join ','
+    $Excel.cells.item($RowOffSet,9) = $Activities[$i].startTime
+    $Excel.cells.item($RowOffSet,10) = $Activities[$i].endTime
+    $Excel.cells.item($RowOffSet,11) = $Activities[$i].duration
+    $Excel.cells.item($RowOffSet,12) = $Activities[$i].nextScheduledTime
 
     if($Activities[$i].jobStatus -eq "FAILED") {
-        $Excel.cells.item($i+2,12).Interior.ColorIndex = 3 
+        $Excel.cells.item($RowOffSet,13).Interior.ColorIndex = 3 
     }
     
-    $Excel.cells.item($i+2,12) = $Activities[$i].jobStatus
-    $Excel.cells.item($i+2,13) = $Activities[$i].assetSize
-    $Excel.cells.item($i+2,14) = $Activities[$i].bytesTransferred
-    $Excel.cells.item($i+2,15) = $Activities[$i].storageTarget
-    $Excel.cells.item($i+2,16) = $Activities[$i].replicationTarget
+    $Excel.cells.item($RowOffSet,13) = $Activities[$i].jobStatus
+    $Excel.cells.item($RowOffSet,14) = $Activities[$i].assetSize
+    $Excel.cells.item($RowOffSet,15) = $Activities[$i].bytesTransferred
+    $Excel.cells.item($RowOffSet,16) = $Activities[$i].storageTarget
+    $Excel.cells.item($RowOffSet,17) = $Activities[$i].replicationTarget
 
 }
 
@@ -530,14 +633,13 @@ $TableObject.TableStyle = $TableStyle
 
 # EXPORT TO PDF
 if($PDF) {
-    # LANDSCAPE
-    $Worksheet.PageSetup.Orientation = 2
-    # ZOOM
-    $Worksheet.PageSetup.Zoom = 30
-    $OutFile = "$($OutPath)\$((Get-Date).ToString('yyyy-MM-dd'))-$($ReportName).pdf"
-    $Worksheet.ExportAsFixedFormat($xlFixedFormat::xlTypePDF,$OutFile)
+    # PDF SETTINGS
+    $Worksheet.PageSetup.Zoom = $Zoom
+    $Worksheet.PageSetup.Orientation = $Orientation
+    $ReportOutFile = "$($ReportOutPath)\$((Get-Date).ToString('yyyy-MM-dd'))-$($ReportName).pdf"
+    $Worksheet.ExportAsFixedFormat($xlFixedFormat::xlTypePDF,$ReportOutFile)
 } else {
-    $Workbook.SaveAs($OutFile) 
+    $Workbook.SaveAs($ReportOutFile) 
 }
 
 # EXIT EXCEL
