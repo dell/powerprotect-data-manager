@@ -621,23 +621,44 @@ function get-dmprotectionpolicies {
     begin {}
     process {
         
+       $Page = 1
         $Results = @()
         $Endpoint = "protection-policies"
 
         if($Filters.Length -gt 0) {
             $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
-            $Endpoint = "$($Endpoint)?filter=$($Join)&pageSize=$($PageSize)"
-        } else {
-            $Endpoint = "$($Endpoint)?pageSize=$($PageSize)"
+            $Endpoint = "$($Endpoint)?filter=$($Join)&"
+        }else {
+            $Endpoint = "$($Endpoint)?"
         }
-
-        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
         -Method GET `
         -ContentType 'application/json' `
         -Headers ($AuthObject.token) `
         -SkipCertificateCheck
+
+        # CAPTURE THE RESULTS
         $Results = $Query.content
         
+        if($Query.page.totalPages -gt 1) {
+            # INCREMENT THE PAGE NUMBER
+            $Page++
+            # PAGE THROUGH THE RESULTS
+            do {
+                $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
+                -Method GET `
+                -ContentType 'application/json' `
+                -Headers ($AuthObject.token) `
+                -SkipCertificateCheck
+
+                # CAPTURE THE RESULTS
+                $Results += $Paging.content
+
+                # INCREMENT THE PAGE NUMBER
+                $Page++   
+            } 
+            until ($Paging.page.number -eq $Query.page.totalPages)
+        }
         return $Results
 
     } # END PROCESS
@@ -848,8 +869,8 @@ function new-dmmonitor {
     System.Array
 
     .EXAMPLE
-    PS> # Start a new recovery job
-    PS>  $Recover = new-dmrecover -Body $Body
+    PS> # Start a new monitor
+    PS>  $Recover = new-dmmonitor -ActivityId $_.activityId
 
     .LINK
     https://developer.dell.com/apis/4378/versions/19.14.0/reference/ppdm-public.yaml/paths/~1api~1v2~1activities~1%7Bid%7D/get
@@ -1027,24 +1048,44 @@ function get-dmagentregistration {
     )
     begin {}
     process {
+        $Page = 1
         $Results = @()
-
-        # GET THE INSTANT ACCESS SESSION
         $Endpoint = "agent-registration-status"
+
         if($Filters.Length -gt 0) {
             $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
-            $Endpoint = "$($Endpoint)?filter=$($Join)&pageSize=$($PageSize)"
-        } else {
-            $Endpoint = "$($Endpoint)?pageSize=$($PageSize)"
+            $Endpoint = "$($Endpoint)?filter=$($Join)&"
+        }else {
+            $Endpoint = "$($Endpoint)?"
         }
-        $Query = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)" `
+        $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
         -Method GET `
         -ContentType 'application/json' `
         -Headers ($AuthObject.token) `
         -SkipCertificateCheck
 
+        # CAPTURE THE RESULTS
         $Results = $Query.content
+        
+        if($Query.page.totalPages -gt 1) {
+            # INCREMENT THE PAGE NUMBER
+            $Page++
+            # PAGE THROUGH THE RESULTS
+            do {
+                $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)pageSize=$($PageSize)&page=$($Page)" `
+                -Method GET `
+                -ContentType 'application/json' `
+                -Headers ($AuthObject.token) `
+                -SkipCertificateCheck
 
+                # CAPTURE THE RESULTS
+                $Results += $Paging.content
+
+                # INCREMENT THE PAGE NUMBER
+                $Page++   
+            } 
+            until ($Paging.page.number -eq $Query.page.totalPages)
+        }
         return $Results
     }
 }
@@ -1252,7 +1293,7 @@ function get-dmcredentials {
 
         if($Filters.Length -gt 0) {
             $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
-            $Endpoint = "$($Endpoint)?filter=$($Join)"
+            $Endpoint = "$($Endpoint)?filter=$($Join)&"
         }else {
             $Endpoint = "$($Endpoint)?"
         }
@@ -1334,7 +1375,7 @@ function set-dmdiskexclusions {
         # ENUMERATE THE CONFIG ARRAY
         foreach($Disk in $Config) {
 
-            # ALWAYS SET HARD DISK 1 TO EXCLUDE = $false
+            # ALWAYS SET HARD DISK 1 TO EXCLUDED = $false
             if($Disk.label -eq 'Hard disk 1') {
                 # CREATE THE SETTINGS
                     $object = @{
@@ -1556,6 +1597,258 @@ function get-dmauditlogs {
             $Page++;
         } 
         until ($Paging.page.queryState -eq "END")
+        return $Results
+    }
+}
+
+function get-dminfrastructurenodes {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager infrastructure-nodes
+
+    .DESCRIPTION
+    Get PowerProtect Data Manager infrastructure-nodes
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .PARAMETER PageSize
+    An int representing the desired number of elements per page
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET AN INFRASTRUCTURE NODE
+    PS> $Filters = @(
+            "name eq `"$($_.name)`""
+            "and attributes.appHost.protectionEngineFlow eq `"APPDIRECT`"",
+            "and not (lastDiscoveryStatus eq `"DELETED`")",
+            "and attributes.appHost.os eq `"WINDOWS`""
+    )
+    PS> $Node = get-dminfrastructurenodes -Filters $Filters -Type MICROSOFT_SQL_DATABASE_VIEW -PageSize $PageSize
+    
+#>
+        [CmdletBinding()]
+        param (
+            [Parameter( Mandatory=$false)]
+            [array]$Filters,
+            [Parameter( Mandatory=$true)]
+            [string]$Type,
+            [Parameter( Mandatory=$true)]
+            [int]$PageSize
+        )
+        begin {}
+        process {
+            $Page = 1
+            $Results = @()
+            $Endpoint = "infrastructure-nodes"
+            
+            if($Filters.Length -gt 0) {
+                $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+                $Endpoint = "$($Endpoint)?hierarchyType=$($Type)&filter=$($Join)"
+            } else {
+                $Endpoint = "$($Endpoint)?hierarchyType=$($Type)"
+            }
+    
+            $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+            -Method GET `
+            -ContentType 'application/json' `
+            -Headers ($AuthObject.token) `
+            -SkipCertificateCheck
+
+            # CAPTURE THE RESULTS
+            $Results = $Query.content
+            
+            if($Query.page.totalPages -gt 1) {
+                # INCREMENT THE PAGE NUMBER
+                $Page++
+                # PAGE THROUGH THE RESULTS
+                do {
+                    $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+                    -Method GET `
+                    -ContentType 'application/json' `
+                    -Headers ($AuthObject.token) `
+                    -SkipCertificateCheck
+
+                    # CAPTURE THE RESULTS
+                    $Results += $Paging.content
+
+                    # INCREMENT THE PAGE NUMBER
+                    $Page++   
+                } 
+                until ($Paging.page.number -eq $Query.page.totalPages)
+            }
+        return $Results
+    }
+}
+
+function get-dminfrastructurenodeschildren {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager infrastructure-nodes/{id}/children
+
+    .DESCRIPTION
+    Get PowerProtect Data Manager infrastructure-nodes/{id}/children
+
+    .PARAMETER Id
+    A string value representing the application host id
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .PARAMETER Type
+    A string representing the hierarchyType
+
+    .PARAMETER PageSize
+    An int representing the desired number of elements per page
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET THE CHILDREN FOR AN INFRASTRUCTURE NODE
+    PS> $Filters = @(
+        "clusterType in (`"NONE`", `"FCI`")",
+        "and lastDiscoveryStatus eq `"NEW`""
+    )
+    PS> $Nodes = get-dminfrastructurenodeschildren -Id $Id -Filters $Filters -Type MICROSOFT_SQL_DATABASE_VIEW -PageSize $PageSize
+    
+#>
+        [CmdletBinding()]
+        param (
+            [Parameter( Mandatory=$true)]
+            [string]$Id,
+            [Parameter( Mandatory=$false)]
+            [array]$Filters,
+            [Parameter( Mandatory=$true)]
+            [string]$Type,
+            [Parameter( Mandatory=$true)]
+            [int]$PageSize
+        )
+        begin {}
+        process {
+            $Page = 1
+            $Results = @()
+            $Endpoint = "infrastructure-nodes/$($Id)/children"
+            
+            if($Filters.Length -gt 0) {
+                $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+                $Endpoint = "$($Endpoint)?hierarchyType=$($Type)&filter=$($Join)"
+            } else {
+                $Endpoint = "$($Endpoint)?hierarchyType=$($Type)"
+            }
+            
+            $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+            -Method GET `
+            -ContentType 'application/json;charset=utf-8' `
+            -Headers ($AuthObject.token) `
+            -SkipCertificateCheck
+
+            # CAPTURE THE RESULTS
+            $Results = $Query.content
+
+            $Results | format-list
+
+            if($Query.page.totalPages -gt 1) {
+                # INCREMENT THE PAGE NUMBER
+                $Page++
+                # PAGE THROUGH THE RESULTS
+                do {
+                    $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+                    -Method GET `
+                    -ContentType 'application/json;charset=utf-8' `
+                    -Headers ($AuthObject.token) `
+                    -SkipCertificateCheck
+
+                    # CAPTURE THE RESULTS
+                    $Results += $Paging.content
+
+                    # INCREMENT THE PAGE NUMBER
+                    $Page++   
+                } 
+                until ($Paging.page.number -eq $Query.page.totalPages)
+            }
+        return $Results
+    }
+}
+
+function get-dmfileinstances {
+<#
+    .SYNOPSIS
+    Get PowerProtect Data Manager file instances
+
+    .DESCRIPTION
+    Get PowerProtect Data Manager file instances
+
+    .PARAMETER Filters
+    An array of values used to filter the query
+
+    .PARAMETER PageSize
+    An int representing the desired number of elements per page
+
+    .OUTPUTS
+    System.Array
+
+    .EXAMPLE
+    PS> # GET THE CHILDREN FOR AN INFRASTRUCTURE NODE
+    PS> $Filters = @(
+        "clusterType in (`"NONE`", `"FCI`")",
+        "and lastDiscoveryStatus eq `"NEW`""
+    )
+    PS> $Files = get-dmfileinstances -Filters $Filters -PageSize $PageSize
+    
+#>
+        [CmdletBinding()]
+        param (
+            [Parameter( Mandatory=$false)]
+            [array]$Filters,
+            [Parameter( Mandatory=$true)]
+            [int]$PageSize
+        )
+        begin {}
+        process {
+            $Page = 1
+            $Results = @()
+            $Endpoint = "file-instances"
+            
+            if($Filters.Length -gt 0) {
+                $Join = ($Filters -join ' ') -replace '\s','%20' -replace '"','%22'
+                $Endpoint = "$($Endpoint)?filter=$($Join)"
+            }else {
+                $Endpoint = "$($Endpoint)"
+            }
+            
+            $Query =  Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+            -Method GET `
+            -ContentType 'application/json' `
+            -Headers ($AuthObject.token) `
+            -SkipCertificateCheck
+
+            # CAPTURE THE RESULTS
+            $Results = $Query.content
+
+            $Results | format-list
+
+            if($Query.page.totalPages -gt 1) {
+                # INCREMENT THE PAGE NUMBER
+                $Page++
+                # PAGE THROUGH THE RESULTS
+                do {
+                    $Paging = Invoke-RestMethod -Uri "$($AuthObject.server)/$($Endpoint)&pageSize=$($PageSize)&page=$($Page)" `
+                    -Method GET `
+                    -ContentType 'application/json' `
+                    -Headers ($AuthObject.token) `
+                    -SkipCertificateCheck
+
+                    # CAPTURE THE RESULTS
+                    $Results += $Paging.content
+
+                    # INCREMENT THE PAGE NUMBER
+                    $Page++   
+                } 
+                until ($Paging.page.number -eq $Query.page.totalPages)
+            }
         return $Results
     }
 }
