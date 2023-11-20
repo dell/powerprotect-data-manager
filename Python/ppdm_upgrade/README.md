@@ -1,2 +1,2 @@
 # PowerProtect Data Manager Automated Lifecycle Management Solution
-More info can be found [HERE]([https://infohub.delltechnologies.com/p/powerprotect-data-manager-deployment-automation-deploy-powerprotect-data-manager-in-minutes/](https://infohub.delltechnologies.com/p/powerprotect-data-manager-automation-lifecycle-management-2/)https://infohub.delltechnologies.com/p/powerprotect-data-manager-automation-lifecycle-management-2/)
+More info can be found [HERE](https://infohub.delltechnologies.com/p/powerprotect-data-manager-automation-lifecycle-management-2/)
