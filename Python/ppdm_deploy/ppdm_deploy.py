@@ -13,7 +13,7 @@ import urllib3
 
 # The purpose of this script is to automate PowerProtect Data Manager deployment
 # Author - Idan Kentor <idan.kentor@dell.com>
-# Version 1 - September 2023
+# Version 2 - November 2023
 # Copyright [2023] [Idan Kentor]
 
 # Examples:
@@ -60,66 +60,61 @@ def read_config(configfile):
     for key in list(config.keys()):
       if key.startswith('_comment'):
             config.pop(key)
-    try:
-        if (not config["ppdmIPV6"]):
-            config["IPv6"] = False
-        else:
-            if not config["ppdmIpV6Netmask"] or not config["ppdmIpV6Gateway"]:
+    config["ppdmIpV6"] = config.get("ppdmIpV6", False)
+    if config["ppdmIpV6"]:
+        if not config.get("ppdmIpV6Netmask") or not config.get("ppdmIpV6Gateway"):
                 print("\033[91m\033[1m->Missing IPv6 configuration parameters\033[0m")
                 sys.exit(1)
-    except KeyError:
-        config["IPv6"] = False
-    if not config["IPv6"]:
+    if not config["ppdmIpV6"]:
+        config["ppdmIpV4"] = config.get("ppdmIpV4", False)
         if not config["ppdmIpV4"]:
-            print("\033[91m\033[1m->Missing PPDM IPv4\033[0m")
+            print("\033[91m\033[1m->Missing PPDM IPv4 address\033[0m")
             sys.exit(1)
+        config["ppdmIpV4Netmask"] = config.get("ppdmIpV4Netmask", False)
+        config["ppdmIpv4Gateway"] = config.get("ppdmIpv4Gateway", False)
         if not config["ppdmIpV4Netmask"] or not config["ppdmIpv4Gateway"]:
                 print("\033[91m\033[1m->Missing IPv4 configuration parameters\033[0m")
                 sys.exit(1)
-    if not config["ppdmDatastore"]:
+    if not config.get("ppdmDatastore"):
         print("\033[91m\033[1m->No Datastore provided, specify DS for PPDM\033[0m")
         sys.exit(1)
-    if not config["ppdmMgmtNetwork"]:
+    if not config.get("ppdmMgmtNetwork"):
         print("\033[91m\033[1m->Management Network Port Group must be specified")
         sys.exit(1)
-    config["ntpServers"] = config["ntpServers"][0].split(", ")
-    config["dnsServers"] = config["dnsServers"][0].split(", ")
-    if "licenseFile" not in config:
-        config["licenseFile"] = "trial"
-    if "protectionEncryption" not in config:
-        config["protectionEncryption"] = True
-    elif type(config["protectionEncryption"]) != bool:
-        print("\033[91m\033[1m->invalid value for protectionEncryption\033[0m")
+    if not config.get("ntpServers") or not config.get("dnsServers"):
+        print("\033[91m\033[1m->Missing DNS or NTP IP addresses\033[0m")
         sys.exit(1)
-    if "replicationEncryption" not in config:
-        config["replicationEncryption"] = True
-    elif type(config["replicationEncryption"]) != bool:
-        print("\033[91m\033[1m->invalid value for replicationEncryption\033[0m")
+    else:
+        config["ntpServers"] = config["ntpServers"][0].split(", ")
+        config["dnsServers"] = config["dnsServers"][0].split(", ")
+    config["licenseFile"] = config.get("licenseFile", "trial")
+    for encryptType in ("protectionEncryption", "replicationEncryption"):
+        config[encryptType] = config.get(encryptType, True)
+    if type(config[encryptType]) != bool:
+        print("\033[91m\033[1m-> invalid value for {}\033[0m".format(encryptType))
         sys.exit(1)
     for assetType in ["vc", "dd", "peerPpdm"]:
-        if not (assetType + "NiceName") in config:
+        if all(key in config for key in (assetType + "FQDNorIP", assetType + "User", assetType + "Password")):
+            config[assetType + "Valid"] = True
             if config[assetType + "FQDNorIP"][0].isdigit():
                 config[assetType + "NiceName"] = assetType.upper() + config[assetType + "FQDNorIP"].split('.')[3]
             else:
                 config[assetType + "NiceName"] = config[assetType + "FQDNorIP"].split('.')[0]
-        if all(key in config for key in (assetType + "FQDNorIP", assetType + "User", assetType + "Password")):
-            config[assetType + "Valid"] = True
         else:
             config[assetType + "Valid"] = False
     if all(key in config for key in ("smtpMailServer", "smtpMailFrom", "smtpPort")):
            config["smtp"] = True
     else:
         config["smtp"] = False
-    if "smtpUser" in config and "smtpPassword" in config:
+    if config.get("smtpUser") and config.get("smtpPassword"):
         config["smtpAuth"] = True
     else:
         config["smtpAuth"] = False
-    if "autoSupport" not in config:
+    if not config.get("autoSupport"):
         if config["smtp"]:
             config["autoSupport"] = True
         else:
             config["autoSupport"] = False
-    
     return config
 
 def create_ovftool_command(config):
@@ -127,7 +122,7 @@ def create_ovftool_command(config):
     print()
     ppdmOvfExec = '{} --noDestinationSSLVerify --skipManifestCheck --acceptAllEulas --powerOn --name="{}" '.format(config["ovfToolLocation"], config["ppdmVmName"])
     ppdmOvfExec += '--diskMode=thin --datastore={} --net:"VM Network"="{}" '.format(config["ppdmDatastore"], config["ppdmMgmtNetwork"])
-    if not config["IPv6"]:
+    if not config["ppdmIpV6"]:
         ppdmOvfExec += '--prop:vami.ip0.brs={} --prop:vami.netmask0.brs="{}" --prop:vami.gateway.brs="{}" '.format(config["ppdmIpV4"], config["ppdmIpV4Netmask"], config["ppdmIpv4Gateway"])
     else:
         ppdmOvfExec += '--prop:vami.ip0.brs={} --prop:vami.netmask0.brs="{}" --prop:vami.gateway.brs="{}" '.format(config["ppdmIpV6"], config["ppdmIpV6Netmask"], config["ppdmIpV6Gateway"])
@@ -603,16 +598,10 @@ def main():
     config["adminDefaultPwd"] = "@ppAdm1n"
     config["supportDefaultPwd"] = "$upp0rt!"
 
-    if not config["IPv6"]:
+    if not config["ppdmIpV6"]:
         ppdmIp = config["ppdmIpV4"]
     else:
         ppdmIp = config["ppdmIpV6"]
-    if not config["ddPort"]:
-        config["ddPort"] = defaultDdPort
-    if not config["vcPort"]:
-        config["vcPort"] = defaultVcPort
-    if not config["peerPpdmPort"]:
-        config["peerPpdmPort"] = ppdmApiPort
 
     # Creates the ovftool command for PPDM deployment
     if not skipOva:
@@ -675,10 +664,10 @@ def main():
         if result:
             print("\033[92m\033[1m-> PPDM deployed successfully\033[0m")
         else:
-            print("\033[91m\033[1m-> PPDM deployment failed\033[39m")
+            print("\033[91m\033[1m-> PPDM deployment failed\033[0m")
             sys.exit(1)
     else:
-            print("\033[91m\033[1m-> PPDM deployment failed\033[39m")
+            print("\033[91m\033[1m-> PPDM deployment failed\033[0m")
             sys.exit(1)
     
     # Post-install steps - AutoSupport, VC, DD and peer PPDM
@@ -694,18 +683,27 @@ def main():
         accept_eula("TELEMETRY", ppdmUri, token)
         config_auto_support(ppdmUri, token)
     if registerVCenter:
+        config["vcPort"] = config.get("vcPort")
+        if not config["vcPort"]:
+            config["vcPort"] = defaultVcPort
         if config["vcValid"]:
             if accept_certificate("vc", config, ppdmUri, token):
                 register_asset_source("VCENTER", config, ppdmUri, token)
         else:
             print("-> Missing vCenter details, skipping vCenter registration")
     if addPowerProtectDD:
+        config["ddPort"] = config.get("ddPort")
+        if not config["ddPort"]:
+            config["ddPort"] = defaultDdPort
         if config["ddValid"]:
             if accept_certificate("dd", config, ppdmUri, token):
                 register_asset_source("DATADOMAIN", config, ppdmUri, token)
         else:
             print("-> Missing PowerProtect DD details, skipping DD registration")
     if connectPeerPPDM:
+        config["peerPpdmPort"] = config.get("peerPpdmPort")
+        if not config["peerPpdmPort"]:
+            config["peerPpdmPort"] = ppdmApiPort
         if config["peerPpdmValid"]:
             if accept_certificate("peerPpdm", config, ppdmUri, token):
                 print("-> Connecting peer PPDM host")
