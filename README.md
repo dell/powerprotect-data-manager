@@ -5,7 +5,7 @@ This repository contains Python scripts for common flows in Dell EMC PowerProtec
 - **Idan Kentor** - [Dell Technologies](https://www.dell.com)
 - **Cliff Rodriguez** - [Dell Technologies](https://www.dell.com)
 ## Supported Platforms
-- PowerProtect Data Manager 19.3 and later
+- All supported versions of PowerProtect Data Manager
 ## Prerequisites
 - Python 3.x
 - PowerShell 7.x
