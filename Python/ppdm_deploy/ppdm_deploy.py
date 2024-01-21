@@ -66,6 +66,14 @@ def get_args():
         help="Optionally registers vCenter in PPDM",
     )
     parser.add_argument(
+        "-novcplugin",
+        "--prevent-plugin-install",
+        required=False,
+        dest="noVcPlugin",
+        action="store_false",
+        help="Prevents vCenter plugin deployment",
+    )
+    parser.add_argument(
         "-dd",
         "--add-dd",
         required=False,
@@ -302,9 +310,8 @@ def check_deployment(ppdmUri, token):
     if nodes["content"][0]["status"] != "PENDING":
         print("PPDM is not available for deployment. Exiting...")
         raise SystemExit(1)
-    else:
-        print("---> PPDM is deployment ready")
-        return nodes["content"][0]["id"]
+    print("---> PPDM is deployment ready")
+    return nodes["content"][0]["id"]
 
 
 def get_deploy_config(ppdmUri, token, nodeId):
@@ -341,7 +348,7 @@ def apply_license(licenseFile, ppdmUri, token):
             fileHandle = open(licenseFile, "r", encoding="utf-8")
             licenseContent = fileHandle.read()
             fileHandle.close()
-        except:
+        except (OSError, FileNotFoundError):
             licenseFile = "trial"
     else:
         print("-> Using Trial license")
@@ -380,16 +387,15 @@ def apply_encryption_settings(config, ppdmUri, token):
     """Applying Encryption settings"""
     encrSetUriSuffix = "/common-settings/ENCRYPTION_SETTING"
     ppdmUri += encrSetUriSuffix
-    encrSetPayload = {}
-    encrSetPayload["id"] = "ENCRYPTION_SETTING"
+    encrSetPayload = {"id": "ENCRYPTION_SETTING"}
     protectionEncryption = {
         "name": "enableProtectionEncryption",
-        "value": config["protectionEncryption"],
+        "value": str(config["protectionEncryption"]).lower(),
         "type": "BOOLEAN",
     }
     replicationEncryption = {
         "name": "enableReplicationEncryption",
-        "value": config["replicationEncryption"],
+        "value": str(config["replicationEncryption"]).lower(),
         "type": "BOOLEAN",
     }
     encrSetPayload["properties"] = []
@@ -598,23 +604,25 @@ def register_asset_source(assetType, config, ppdmUri, token):
         "name": config[assetTypeAlt + "NiceName"],
         "address": config[assetTypeAlt + "FQDNorIP"],
         "port": config[assetTypeAlt + "Port"],
-        "username": config[assetTypeAlt + "User"],
-        "password": config[assetTypeAlt + "Password"],
         "credentials": {"id": credsId},
     }
     if assetType == "DATADOMAIN":
         payload["type"] = "EXTERNALDATADOMAIN"
+    elif assetType == "VCENTER":
+        vcDetails = {
+            "hosting": True,
+            "vSphereUiIntegration": config["noVcPlugin"]
+        }
+        payload["details"] = {"vCenter": vcDetails}
     response = init_rest_call("POST", ppdmUri, token, payload)
     if "id" in response:
         print(f"-> {assetTypeAlt2} registered successfully")
         if "vCenter" in response["details"]:
-            response["details"]["vCenter"]["hosting"] = True
-            ppdmUri += f"/{response['id']}"
-            response = init_rest_call("PUT", ppdmUri, token, response)
             if response["details"]["vCenter"]["hosting"]:
                 print("--> Hosting vCenter configured successfully")
-            else:
-                print("--> Hosting vCenter could not be configured")
+            if not config["noVcPlugin"]:
+                if not response["details"]["vCenter"]["vSphereUiIntegration"]:
+                    print("--> PPDM vCenter plugin installation was skipped")
         return True
     print(f"-> {assetTypeAlt2} could not be registered")
     return False
@@ -667,17 +675,17 @@ def connect_peer_ppdm(config, ppdmUri, token):
     ):
         print("---> Peer PPDM registered successfully")
         return True
-    else:
-        print("---> Peer PPDM could not be registered")
-        return False
+    print("---> Peer PPDM could not be registered")
+    return False
 
 
 def main():
     # Args assignment
     args = get_args()
     configfile, skipOva, justOva = args.configfile, args.skipova, args.justova
-    registerVCenter, addPowerProtectDD = args.regVC, args.addDD
-    connectPeerPPDM, ppdmCrossConnect = args.connectPeerPPDM, args.crossConnect
+    registerVCenter, noVcPlugin = args.regVC, args.noVcPlugin
+    addPowerProtectDD, connectPeerPPDM = args.addDD, args.connectPeerPPDM
+    ppdmCrossConnect = args.crossConnect
 
     config = read_config(configfile)
 
@@ -718,10 +726,10 @@ def main():
     if not check_connectivity(ppdmIp, config["ppdmIpTimeout"]):
         print(f"---> PPDM IP {ppdmIp} is unreachable")
     else:
-        print(f"\033[92m\033[1m---> PPDM IP {ppdmIp} is reachable")
+        print(f"\033[92m\033[1m---> PPDM IP {ppdmIp} is reachable\033[0m")
         print("-> Checking PPDM API readiness")
         if check_api_accessibility(ppdmIp, config["ppdmApiTimeout"]):
-            print("\033[92m\033[1m---> PPDM API is available")
+            print("\033[92m\033[1m---> PPDM API is available\033[0m")
 
     # Logs into the PPDM API
     ppdmUri = f"https://{ppdmIp}:{ppdmApiPort}{apiEndpoint}"
@@ -794,6 +802,7 @@ def main():
         config["vcPort"] = config.get("vcPort")
         if not config["vcPort"]:
             config["vcPort"] = defaultVcPort
+        config["noVcPlugin"] = noVcPlugin
         if config["vcValid"]:
             if accept_certificate("vc", config, ppdmUri, token):
                 register_asset_source("VCENTER", config, ppdmUri, token)
@@ -815,14 +824,14 @@ def main():
         if config["peerPpdmValid"]:
             if accept_certificate("peerPpdm", config, ppdmUri, token):
                 print("-> Connecting peer PPDM host")
-                QrEnabled = connect_peer_ppdm(config, ppdmUri, token)
+                qrEnabled = connect_peer_ppdm(config, ppdmUri, token)
         else:
             print("-> Missing peer PPDM details, skipping configuration")
-            QrEnabled = False
+            qrEnabled = False
     else:
-        QrEnabled = False
+        qrEnabled = False
     # Configuring bi-directional communication only if selected and peer PPDM is connected
-    if QrEnabled and ppdmCrossConnect:
+    if qrEnabled and ppdmCrossConnect:
         print("-> Configuring bi-directional replication direction")
         # Authenticating and operating against peer PPDM
         peerPpdmUri = f"https://{config['peerPpdmFQDNorIP']}:{ppdmApiPort}{apiEndpoint}"
