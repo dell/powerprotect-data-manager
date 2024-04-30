@@ -16,10 +16,10 @@ connect-dmapi -Server $Server
 $Filters = @(
     "name eq `"Policy-VM01`""
 )
-$Policy = get-dmprotectionpolicies -Filters $Filters -PageSize $PageSize
+# $Policy = get-dmprotectionpolicies -Filters $Filters -PageSize $PageSize
 
 # GET ALL PROTECTION POLICIES
-# $Policy = get-dmprotectionpolicies -PageSize $PageSize
+$Policy = get-dmprotectionpolicies -PageSize $PageSize
 
 $Policy | format-list
 

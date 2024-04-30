@@ -4,7 +4,7 @@ Cliff Rodriguez
   * [Dell Technoligies](https://www.dell.com/en-us)
   * [LinkedIn](https://www.linkedin.com/in/cliff-rodriguez-6673422b/)
 # Supported Platforms
-* PowerProtect Data Manager 19.14
+* PowerProtect Data Manager 19.16
 # Prerequisites
 * PowerShell 7.(latest) - [github](https://github.com/PowerShell/powershell/releases)
 # Conventions
@@ -26,7 +26,7 @@ Cliff Rodriguez
   * PS> Get-Help -Name {cmdlet-name} -Detailed
   * PS> Get-Help -Name {cmdlet-name} -Full
 # Documentation
-* PowerProtect Data Manager - [rest api](https://developer.dell.com/apis/4378/versions/19.13.0/docs/introduction.md)
+* PowerProtect Data Manager - [rest api](https://developer.dell.com/apis/4378/versions/19.16.0/docs/introduction.md)
 * PowerProtect Data Manager - [info hub](https://www.dell.com/support/kbdoc/en-us/000196987/dell-powerprotect-data-manager-info-hub-product-documents-and-information?lang=en)
 * PowerShell 7.(latest) - [docs](https://learn.microsoft.com/en-us/powershell)
 
@@ -59,3 +59,6 @@ Cliff Rodriguez
 | Example-23  | Create new credentials                                                   | ANY         | Config   |
 | Example-24  | Deploy a search node                                                     | VMWARE      | Config   |
 | Example-25  | Get the audit logs based on filters                                      | ANY         | Query    |
+| Example-26  | Recover database asset to multiple SQL hosts using custom name & paths   | ANY         | Recover  |
+| Example-27  | Set custom disk exclusions per asset by disk mode (advanced)             | VMWARE      | Config   |
+| Example-28  | Cancels a running or queued activity                                     | ANY         | Backup   |

@@ -10,10 +10,11 @@ $Server = "ppdm-01.vcorp.local"
 $PageSize = 100
 $Poll = 15
 $Recover = @()
-$SourceDatabase = "data_warehouse_s01"
-$SourceSqlHost = "win-sql-01.vcorp.local"
+$SourceDatabase = "data_warehouse_s03"
+$SourceSqlHost = "win-sql-03.vcorp.local"
 
 $TargetSqlHosts = @(
+    <#
     @{
         name="win-sql-02.vcorp.local"
         dbAltName = "test_restore_s02"
@@ -34,6 +35,7 @@ $TargetSqlHosts = @(
         enableCompressedRestore = $false
         disconnectDatabaseUsers = $false
     },
+    #>
     @{
         name="win-sql-04.vcorp.local"
         dbAltName = "test_restore_s04"
@@ -76,14 +78,21 @@ $TargetSqlHosts | foreach-object {
         "and not (lastDiscoveryStatus eq `"DELETED`")",
         "and attributes.appHost.os eq `"WINDOWS`""
     )
-    $Node = get-dminfrastructurenodes -Filters $Filters -Type MICROSOFT_SQL_DATABASE_VIEW -PageSize $PageSize
+    $Node = get-dminfrastructurenodes `
+    -Filters $Filters `
+    -Type MICROSOFT_SQL_DATABASE_VIEW `
+    -PageSize $PageSize
     
     $Filters = @(
         "clusterType in (`"NONE`", `"FCI`")",
         "and lastDiscoveryStatus eq `"NEW`""
     )
     
-    $AppSys = get-dminfrastructurenodeschildren -Id $Node.id -Filters $Filters -Type MICROSOFT_SQL_DATABASE_VIEW -PageSize $PageSize
+    $AppSys = get-dminfrastructurenodeschildren `
+    -Id $Node.id `
+    -Filters $Filters `
+    -Type MICROSOFT_SQL_DATABASE_VIEW `
+    -PageSize $PageSize
 
     $Body = [ordered]@{
         restoreType = "TO_ALTERNATE"
