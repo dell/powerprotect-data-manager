@@ -13,7 +13,7 @@ $PageSize = 100
 connect-dmapi -Server $Server
 
 $Filters = @(
-    "hostname eq `"win-sql-01.vcorp.local`""
+    "hostname eq `"win-iis-01.vcorp.local`""
 )
 # GET AGENT REGISTRATION STATUS BASED ON A FILTER
 $Agent = get-dmagentregistration -Filters $Filters -PageSize $PageSize

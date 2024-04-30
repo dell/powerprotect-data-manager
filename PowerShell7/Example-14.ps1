@@ -13,7 +13,8 @@ $PageSize = 100
 connect-dmapi -Server $Server
 
 $Filters = @(
-    "name eq `"win-iis-01`""
+    "name eq `"data_warehouse_s01`"",
+    "and copyType eq `"FULL`""
 )
 # GET ASSETS BASED ON FILTERS
 $Asset = get-dmassets -Filters $Filters -PageSize $PageSize
