@@ -13,7 +13,7 @@ import urllib3
 
 # This script purpose is to automate PowerProtect Data Manager deployment
 # Author - Idan Kentor <idan.kentor@dell.com>
-# Version 3 - January 2024
+# Version 4 - June 2024
 # Copyright [2024] [Idan Kentor]
 
 # Examples:
@@ -374,8 +374,8 @@ def config_smtp(config, ppdmUri, token):
         "port": config["smtpPort"],
     }
     if config["smtpAuth"]:
-        payload["username"]: config["smtpUser"]
-        payload["password"]: config["smtpPassword"]
+        payload["username"] = config["smtpUser"]
+        payload["password"] = config["smtpPassword"]
     response = init_rest_call("POST", ppdmUri, token, payload)
     if "id" in response:
         return True
@@ -576,6 +576,7 @@ def config_auto_support(ppdmUri, token):
         for element in response["properties"]:
             if element["name"] == "transportType":
                 element["value"] = "EMAIL"
+    del response["_links"]
     payload = response
     response = init_rest_call("PUT", ppdmUri, token, payload)
     if "id" in response:
