@@ -282,7 +282,7 @@ def adhoc_backup_v3(uri, token, protect_payload):
 
 def monitor_activity(uri, token, activity_id):
     """Monitors an activity by its ID"""
-    timeout = 300  # 5 minutes timeout
+    timeout = 1200  # 20 minutes timeout
     interval = 10  # 10 seconds interval
     uri = f"{uri}/activities/{str(activity_id)}"
     start = time.time()
@@ -290,8 +290,13 @@ def monitor_activity(uri, token, activity_id):
         if (time.time() - start) > timeout:
             break
         response = init_rest_call("GET", uri, token)
-        print(f"Activity {activity_id} {response['state']}")
-        if response["state"] == 'COMPLETED':
+        timestamp = time.strftime("%m-%d-%y %H:%M:%S")
+        print(f"Activity {activity_id} {response['state']} at {timestamp}")
+        if response["state"] == "COMPLETED":
+            duration_sec = response["duration"] / 1000
+            duration_min = int(duration_sec // 60)
+            duration_sec = round(duration_sec % 60, 2)
+            print(f"Backup completed in {duration_min} minutes and {duration_sec} seconds")
             return response["result"]["status"]
         time.sleep(interval)
     return "TIMEOUT"
@@ -312,7 +317,7 @@ def main():
     full_bck, retention, nmonitor = args.full, args.retention, args.nmonitor
     aid, aidfile, outfile = args.activity_id, args.aidfile, args.outfile
     asset_type = args.type
-    
+
     uri = f"https://{ppdm}:{api_port}{api_endpoint}"
     token = authenticate(ppdm, user, password, uri)
     version = get_version(uri, token)
@@ -348,7 +353,8 @@ def main():
             print(f"Asset name {name} yielded in more than 1 result")
             print("Narrow down the results using the id or type parameters")
         elif len(assets) == 1:
-            print("Performing Ad-hoc backup for asset", assets[0]["name"])
+            timestamp = time.strftime("%m-%d-%y %H:%M:%S")
+            print(f"Performing Ad-hoc backup for asset {assets[0]["name"]} at {timestamp}")
             policy_id = assets[0]["protectionPolicyId"]
             asset_id = assets[0]["id"]
             if api_v3:
