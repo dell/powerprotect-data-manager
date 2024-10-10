@@ -229,7 +229,7 @@ def main():
             print("Could not retrieve Storage Unit Info")
         if len(policy["dpType"]) == 1:
             policy["dpType"] = policy["dpType"][0]
-            policy["ddName"] = policy["ddId"][0]
+            policy["ddName"] = policy["ddName"][0]
             policy["suName"] = policy["suId"][0]
             policy["ddNic"] = policy["ddNic"][0]
         print("Data Protection Operation:", policy["dpType"])
