@@ -12,6 +12,7 @@ import urllib3
 # Version 1 - October 2023
 # Version 2 - March 2024
 # Version 3 - March 2025
+# Version 4 - July 2025
 # Copyright [2025] [Idan Kentor]
 
 # Examples:
@@ -163,6 +164,21 @@ def init_rest_call(verb, uri, token, payload=None, params=None):
         return response.json()
     except AttributeError:
         return response.content
+
+
+def check_deployment_type(ppdm_uri, token, bm_check):
+    """Validates that PPDM deployment type"""
+    ppdm_uri = f"{ppdm_uri}/configurations"
+    config = init_rest_call("GET", ppdm_uri, token)
+    if not config:
+        raise SystemExit("---> PPDM is not available. Exiting...")
+    deploy_type = config["content"][0]["deployedPlatform"]
+    if deploy_type == bm_check:
+        deploy_type = "baremetal"
+        print(f"---> PPDM is deployed as {deploy_type}")
+        raise SystemExit(f"---> Solution is not supported on {deploy_type}. Exiting...")
+    print(f"---> PPDM is deployed on {deploy_type}")
+    return True
 
 
 def check_deployment(ppdm_uri, token, post_deploy=None, target_ver=None):
@@ -414,6 +430,7 @@ def main():
     upg_port = 14443
     upg_timeout = 3600
     upg_token = "abcdefghijklmn"
+    baremetal_check = "GENERIC"
 
     # Arguments check
     if skip_upload and not ppdm_release:
@@ -470,6 +487,7 @@ def main():
 
     # Getting PPDM configuration
     print("-> Obtaining PPDM configuration information")
+    check_deployment_type(ppdm_uri, token, baremetal_check)
     current_ver = check_deployment(ppdm_uri, token)
 
     # Performs pre-upgrade version and upgrade package checks
@@ -510,7 +528,7 @@ def main():
     print("-> Upgrading PPDM to release", upg_data["packageVersion"])
     if skip_snapshot:
         upg_data["skipSnapshot"] = True
-    if check_hosting_vcenter(ppdm_uri, token):
+    if not check_hosting_vcenter(ppdm_uri, token):
         print(
             "---> Skipping PPDM VM snapshot because hosting vCenter is not configured"
         )
