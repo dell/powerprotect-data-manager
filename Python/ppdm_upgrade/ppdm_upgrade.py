@@ -13,6 +13,8 @@ import urllib3
 # Version 2 - March 2024
 # Version 3 - March 2025
 # Version 4 - July 2025
+# Version 5 - November 2025
+
 # Copyright [2025] [Idan Kentor]
 
 # Examples:
@@ -29,81 +31,58 @@ urllib3.disable_warnings()
 def get_args():
     """Gets command line args from the user"""
     parser = argparse.ArgumentParser(
-        description="Script to automate PowerProtect Data Manager lifecycle management"
+        description="Automate PowerProtect Data Manager lifecycle management"
     )
     parser.add_argument(
-        "-s",
-        "--server",
+        "-s", "--server",
         required=True,
-        dest="server",
-        action="store",
         help="PPDM server FQDN or IP",
     )
     parser.add_argument(
-        "-u",
-        "--username",
-        required=False,
-        dest="username",
-        action="store",
+        "-u", "--username",
         default="admin",
-        help="Optionally provide the PPDM username",
+        help="PPDM username (default: admin)",
     )
     parser.add_argument(
-        "-p",
-        "--password",
+        "-p", "--password",
         required=True,
-        dest="password",
-        action="store",
         help="PPDM password",
     )
     parser.add_argument(
-        "-f",
-        "--file",
-        required=False,
+        "-f", "--file",
         dest="upg_file",
-        action="store",
-        help="Full path to upgrade package",
+        help="Full path to the upgrade package",
     )
     parser.add_argument(
-        "-onlyprecheck",
-        "--only-pre-check",
-        required=False,
-        dest="pre_check",
-        action="store_true",
-        help="Optionally stops after pre-check",
-    )
-    parser.add_argument(
-        "-skipupload",
-        "--skip-file-upload",
-        required=False,
-        dest="skip_upload",
-        action="store_true",
-        help="Optionally skips file upload",
-    )
-    parser.add_argument(
-        "-release",
-        "--ppdm-release",
-        required=False,
+        "-release", "--ppdm-release",
         dest="ppdm_release",
-        action="store",
         help="Provide PPDM version if skipping package upload",
     )
     parser.add_argument(
-        "-skipsnapshot",
-        "--skip-snapshot",
-        required=False,
-        dest="skip_snapshot",
+        "-onlyprecheck", "--only-pre-check",
+        dest="pre_check",
         action="store_true",
-        help="Optionally skips PPDM VM snapshot",
+        help="Perform only the pre-check",
     )
     parser.add_argument(
-        "-onlymonitor",
-        "--only-monitor",
-        required=False,
+        "-skipupload", "--skip-file-upload",
+        dest="skip_upload",
+        action="store_true",
+        help="Skip upgrade package upload",
+    )
+    parser.add_argument(
+        "-skipsnapshot", "--skip-snapshot",
+        dest="skip_snapshot",
+        action="store_true",
+        help="Skip PPDM VM snapshot",
+    )
+    parser.add_argument(
+        "-onlymonitor", "--only-monitor",
         dest="just_monitor",
         action="store_true",
-        help="Optionally only monitor running upgrade",
+        help="Only monitor a running upgrade",
     )
+
     args = parser.parse_args()
     return args
 
@@ -114,13 +93,16 @@ def init_rest_call(verb, uri, token, payload=None, params=None):
     monitor = False
     timeout = 90
     code = {200, 201, 202, 204}
+
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
     payload = json.dumps(payload)
+
     if uri.endswith("/login"):
         headers = {"Content-Type": "application/json"}
     elif uri.endswith("/upgrade/status"):
         headers.update({"Authorization": f"{token}"})
         monitor = True
+
     try:
         if verb.lower() == "get":
             response = requests.get(
@@ -142,24 +124,30 @@ def init_rest_call(verb, uri, token, payload=None, params=None):
             )
         response.raise_for_status()
     except requests.exceptions.Timeout as error:
-        print(f"-> Connection timed out:{uri} {error}")
+        print(f"-> Connection timed out: {uri} {error}")
         return False
     except requests.exceptions.ConnectionError as error:
         if not monitor:
             print(f"-> Error Connecting to {uri}: {error}")
         return False
     except requests.exceptions.RequestException as error:
+        if not response:
+            return False
         if response.status_code in (401, 502):
             return False
         print(f"-> The call {response.request.method} {response.url} failed with exception:{error}")
+
     if response.status_code not in code:
         raise requests.exceptions.HTTPError(
             f"-> Failed to query {uri}, code: {response.status_code}, body: {response.text}"
         )
+
     if not response.content:
         return True
+
     if uri.endswith("/login"):
         return response.json()["access_token"]
+
     try:
         return response.json()
     except AttributeError:
@@ -168,37 +156,53 @@ def init_rest_call(verb, uri, token, payload=None, params=None):
 
 def check_deployment_type(ppdm_uri, token, bm_check):
     """Validates that PPDM deployment type"""
-    ppdm_uri = f"{ppdm_uri}/configurations"
-    config = init_rest_call("GET", ppdm_uri, token)
-    if not config:
+    config_uri = f"{ppdm_uri}/configurations"
+    config = init_rest_call("GET", config_uri, token)
+
+    if not config or "content" not in config:
         raise SystemExit("---> PPDM is not available. Exiting...")
-    deploy_type = config["content"][0]["deployedPlatform"]
+
+    deploy_type = config["content"][0].get("deployedPlatform", "UNKNOWN")
+
     if deploy_type == bm_check:
         deploy_type = "baremetal"
         print(f"---> PPDM is deployed as {deploy_type}")
         raise SystemExit(f"---> Solution is not supported on {deploy_type}. Exiting...")
+
     print(f"---> PPDM is deployed on {deploy_type}")
     return True
 
 
 def check_deployment(ppdm_uri, token, post_deploy=None, target_ver=None):
     """Validates that PPDM is ready for upgrade and healthy post-upgrade"""
-    ppdm_uri = f"{ppdm_uri}/nodes"
-    nodes = init_rest_call("GET", ppdm_uri, token)
+    nodes_uri = f"{ppdm_uri}/nodes"
+    retry_interval = 60
+    nodes = init_rest_call("GET", nodes_uri, token)
+
+    if not nodes or not isinstance(nodes, dict) or "content" not in nodes:
+        time.sleep(retry_interval)
+        nodes = init_rest_call("GET", nodes_uri, token)
+        if not nodes or not isinstance(nodes, dict) or "content" not in nodes:
+            raise SystemExit("Cannot query the Data Manager server. Exiting...")
+
     ppdm_node = nodes["content"][0]
-    if ppdm_node["status"] != "OPERATIONAL_RUNNING":
+    status = ppdm_node.get("status")
+    version = ppdm_node.get("version")
+
+    if status != "OPERATIONAL_RUNNING":
         if post_deploy:
-            raise SystemExit(f"PPDM is on version {ppdm_node['version']} but with state {ppdm_node['status']}. Exiting...")
+            raise SystemExit(f"PPDM is on version {version} but with state {status}. Exiting...")
         raise SystemExit("PPDM is not upgrade ready. Exiting...")
+
     if post_deploy:
-        if not target_ver:
-            target_ver = ppdm_node["version"]
-        if ppdm_node["version"] == target_ver:
-            print(f"---> PPDM is operational on version {ppdm_node['version']}")
+        expected_version = target_ver or version
+        if version == expected_version:
+            print(f"---> PPDM is operational on version {version}")
             return True
         raise SystemExit("Post-upgrade version checks failed. Exiting...")
+
     print("---> PPDM is upgrade ready")
-    return ppdm_node["version"]
+    return version
 
 
 def perform_version_checks(ppdm_uri, token, current_ver, ppdm_release, upg_file):
@@ -210,25 +214,30 @@ def perform_version_checks(ppdm_uri, token, current_ver, ppdm_release, upg_file)
         query = f'packageVersion eq "{ppdm_release}" and category eq "ACTIVE"'
     else:
         file_name = os.path.basename(upg_file)
-        pkg_ver = file_name.split("-sw-")[1].rsplit('.', 1)[0]
-        print("---> Checking upgrade to PPDM version:", pkg_ver)
-        if current_ver == pkg_ver:
+        try:
+            target_ver = file_name.split("-sw-")[1].rsplit('.', 1)[0]
+        except IndexError as error:
+            raise SystemExit("Invalid upgrade file format.") from error
+        print("---> Checking upgrade to PPDM version:", target_ver)
+        if current_ver == target_ver:
             raise SystemExit("Current PPDM version is identical to the intended version. Exiting...")
-        query = f'packageVersion eq "{pkg_ver}" and category eq "ACTIVE"'
+
+    query = f'packageVersion eq "{target_ver}" and category eq "ACTIVE"'
     upg_uri = f"{ppdm_uri}/upgrade-packages"
     params = {"filter": query}
     response = init_rest_call("GET", upg_uri, token, None, params)
+
     try:
         return response["content"][0]
     except (IndexError, KeyError):
         query = 'category eq "ACTIVE"'
         params = {"filter": query}
         response = init_rest_call("GET", upg_uri, token, None, params)
-        if len(response["content"]) > 0:
+        if response.get("content"):
             print(
                 "At least one upgrade package of a different version already exists - remove it and retry. Exiting..."
             )
-            raise SystemExit(1) from FileExistsError
+            raise SystemExit(1)
         return False
 
 
@@ -237,6 +246,7 @@ def check_hosting_vcenter(ppdm_uri, token):
     ppdm_uri = f"{ppdm_uri}/inventory-sources"
     query = 'type eq "VCENTER" and details.vCenter.hosting eq true and details.vCenter.internal eq false'
     params = {"filter": query}
+
     response = init_rest_call("GET", ppdm_uri, token, None, params)
     return bool(len(response["content"]) == 1)
 
@@ -245,9 +255,11 @@ def multipart_encoder(upg_file, boundary):
     """Yields multipart form data in chunks"""
     file_name = os.path.basename(upg_file)
     chunk_size = 8192
+
     yield f'--{boundary}\r\n'.encode()
     yield f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'.encode()
     yield b'Content-Type: application/octet-stream\r\n\r\n'
+
     with open(upg_file, 'rb') as file_handle:
         while chunk := file_handle.read(chunk_size):
             yield chunk
@@ -279,38 +291,46 @@ def upload_package(ppdm_uri, token, upg_file):
     except MemoryError as error:
         print("Package upload failed due to insufficient memory/disk space. Exiting...")
         raise SystemExit(1) from error
+
     if response.status_code != 201:
         # if not response.json() or "id" not.json in response:
         print("Package upload failed, exiting...")
         raise SystemExit(1)
+
     time_diff = round(end_time - start_time)
-    print(f"---> Upload completed successfully in {time_diff // 60} mins and {time_diff % 60} secs")
+    print(
+        f"---> Upload completed successfully in {time_diff // 60} mins "
+        f"and {time_diff % 60} secs")
     return response.json()
 
 
 def monitor_preupg_activity(ppdm_uri, token, upg_id, upg_timeout):
     """Monitors pre-upgrade tasks"""
-    ppdm_uri = f"{ppdm_uri}/upgrade-packages/{upg_id}"
-    interval = 5
-    start = time.time()
+    upgrade_uri = f"{ppdm_uri}/upgrade-packages/{upg_id}"
+    poll_interval = 5
+    start_time = time.time()
+
     print(f"-> Monitoring upgrade ID {upg_id}")
+
     while True:
-        if (time.time() - start) > upg_timeout:
+        if (time.time() - start_time) > upg_timeout:
             break
-        response = init_rest_call("GET", ppdm_uri, token)
+        response = init_rest_call("GET", upgrade_uri, token)
         try:
-            if response["state"] in ("AVAILABLE", "INSTALLED"):
-                print(f"---> Monitoring state {response['state']}")
+            state = response["state"]
+            if state in ("AVAILABLE", "INSTALLED"):
+                print(f"---> Monitoring state {state}")
                 return True
-            if response["state"] == "PROCESSING":
-                print(f"---> Monitoring state {response['state']}")
-            elif response["state"] in ("ERROR", "pre_check_FAILED"):
-                print("\033[91m\033[1m->Pre-check failed:\033[39m")
+            if state == "PROCESSING":
+                print(f"---> Monitoring state {state}")
+            elif state in ("ERROR", "pre_check_FAILED"):
+                print("-> Pre-check failed:")
                 print(json.dumps(response, indent=4))
                 return False
         except TypeError:
             pass
-        time.sleep(interval)
+        time.sleep(poll_interval)
+
     return False
 
 
@@ -318,6 +338,7 @@ def authenticate(ppdm_uri, username, password):
     """Login"""
     ppdm_uri = f"{ppdm_uri}/login"
     login_payload = {"username": username, "password": password}
+
     token = init_rest_call("POST", ppdm_uri, login_payload, login_payload)
     return token
 
@@ -325,32 +346,45 @@ def authenticate(ppdm_uri, username, password):
 def perform_pre_check(ppdm_uri, token, upg_id):
     """Executes pre-upgrade checks"""
     ppdm_uri = f"{ppdm_uri}/upgrade-packages/{upg_id}/precheck"
+
     response = init_rest_call("POST", ppdm_uri, token)
     return response
 
 
 def upgrade_ppdm(ppdm_uri, token, upg_data):
     """Upgrades PPDM"""
-    upg_uri = f"{ppdm_uri}/upgrade-packages/{upg_data['id']}"
+    upgrade_uri = f"{ppdm_uri}/upgrade-packages/{upg_data.get('id')}"
     params = {"forceUpgrade": "true"}
     upg_data["sizeInBytes"] = int(float(upg_data["sizeInBytes"]))
-    response = init_rest_call("PUT", upg_uri, token, upg_data, params)
+
+    response = init_rest_call("PUT", upgrade_uri, token, upg_data, params)
+
+    if not response or "category" not in response:
+        print("Upgrade request failed")
+        return False
+
     if "category" in response:
         if response["category"] == "ACTIVE":
             return True
+
     return False
 
 
 def check_ppdm_availability(ppdm_uri, username, password):
     """Checks if PPDM is available after a successfull upgrade"""
-    checks = 3
-    interval = 30
-    for _ in range(checks):
+    max_attempts = 3
+    wait_interval = 30
+
+    for attempt in range(max_attempts):
         response = authenticate(ppdm_uri, username, password)
-        if not response:
-            time.sleep(interval)
-        else:
+        if response:
             return response
+        print(
+            f"Attempt {attempt + 1}/{max_attempts} failed. "
+            f"Retrying in {wait_interval}s..."
+            )
+        time.sleep(wait_interval)
+
     return False
 
 
@@ -359,72 +393,76 @@ def monitor_upg_activity(
 ):
     """Continuously monitors PPDM upgrade operations"""
     ppdm_uri = f"{ppdm_uri}/upgrade/status"
-    interval = 10
-    component_timeout = 600
-    component_interval = 30
+    poll_interval = 20
+    retry_timeout = 600
+    retry_interval = 40
+
     start = time.time()
     print("---> Monitoring PPDM upgrade")
+
     while True:
         if (time.time() - start) > monitor_timeout:
             break
         try:
             response = init_rest_call("GET", ppdm_uri, upg_token)
         except BaseException:
-            time.sleep(component_interval)
+            time.sleep(retry_interval)
             response = init_rest_call("GET", ppdm_uri, upg_token)
-        componentstart = time.time()
+
+        start_time = time.time()
         while not response:
             print("---> Polling timed out, retrying...")
-            time.sleep(component_interval)
+            time.sleep(retry_interval)
             response = init_rest_call("GET", ppdm_uri, upg_token)
-            if (time.time() - componentstart) > component_timeout:
+            if (time.time() - start_time) > retry_timeout:
                 print("Timed out waiting for upgrade to complete. Exiting...")
                 raise SystemExit(1)
             if post_deploy:
                 return "TIMEOUT"
+
         upg_state = response[0]
-        if upg_state["upgradeStatus"] == "RUNNING":
-            print(
-                f"---> Upgrade status: {upg_state['upgradeStatus']} {upg_state['percentageCompleted']}%"
-            )
-            current_stage = upg_state["currentStage"]
-            print(
-                f"----> Upgrade info: current component: {current_stage['component']}, description: {current_stage['description']} {current_stage['percentageCompleted']}%"
-            )
-            print(
-                f"----> Upgrade info: seconds elapsed / remaining: {upg_state['elapsedTime']} / {upg_state['estimatedRemainingTime']}"
-            )
-        elif upg_state["upgradeStatus"] == "PENDING":
-            print(f"---> Upgrade status: {upg_state['upgradeStatus']}")
-        elif upg_state["upgradeStatus"] == "COMPLETED":
-            print(
-                f"---> Upgrade status: {upg_state['upgradeStatus']} {upg_state['percentageCompleted']}%"
-            )
-            print(
-                f"----> Upgrade completed in {upg_state['elapsedTime'] // 60} mins and {upg_state['elapsedTime'] % 60} seconds"
-            )
+        status = upg_state.get("upgradeStatus")
+        stage = upg_state.get("currentStage")
+
+        if status == "RUNNING":
+            print(f"---> Upgrade status: {status} {upg_state['percentageCompleted']}%")
+            print(f"----> Current component: {stage['component']}, "
+                  f"description: {stage['description']} "
+                  f"{stage['percentageCompleted']}%")
+            print(f"----> Seconds elapsed / remaining: "
+                  f"{upg_state['elapsedTime']} / {upg_state['estimatedRemainingTime']}")
+
+        elif status == "PENDING":
+            print(f"---> Upgrade status: {status}")
+
+        elif status == "COMPLETED":
+            print(f"---> Upgrade status: {status} {upg_state['percentageCompleted']}%")
+            elapsed = upg_state['elapsedTime']
+            print(f"--> Upgrade completed in {elapsed // 60} mins and {elapsed % 60} secs")
             return True
-        elif upg_state["upgradeStatus"] == "FAILED":
+
+        elif status == "FAILED":
             print("---> PPDM Upgrade FAILED")
-            current_stage = upg_state["currentStage"]
-            print(
-                f"----> Failed component: {current_stage['component']}, description {current_stage['description']}"
-            )
+            print(f"----> Failed component: {stage.get('component')}, "
+                  f"description: {stage.get('description')}")
             return False
-        time.sleep(interval)
+
+        time.sleep(poll_interval)
+
     return False
 
 
 def main():
-    # Args assignment
+    # Extract arguments
     args = get_args()
-    server, upg_file = args.server, args.upg_file
-    pre_check, skip_upload = args.pre_check, args.skip_upload
-    username, password = args.username, args.password
-    skip_snapshot, ppdm_release = args.skip_snapshot, args.ppdm_release
-    just_monitor = args.just_monitor
 
-    # Const definition
+    server = args.server
+    username, password = args.username, args.password
+    upg_file, ppdm_release = args.upg_file, args.ppdm_release
+    pre_check, skip_upload = args.pre_check, args.skip_upload
+    skip_snapshot, just_monitor = args.skip_snapshot, args.just_monitor
+
+    # Constants
     api_endpoint = "/api/v2"
     api_port = 8443
     upg_port = 14443
@@ -432,12 +470,13 @@ def main():
     upg_token = "abcdefghijklmn"
     baremetal_check = "GENERIC"
 
-    # Arguments check
+    # Validate Arguments
     if skip_upload and not ppdm_release:
         print(
             "The PPDM release must be provided when skipping package upload. Exiting..."
         )
         raise SystemExit(1)
+
     if ppdm_release and not skip_upload:
         if upg_file:
             print(
@@ -449,6 +488,7 @@ def main():
                 "Upgrade package and 'skip-upload' parameters were not specified. Exiting..."
             )
             raise SystemExit(1)
+
     if not upg_file and not ppdm_release and not skip_upload and not just_monitor:
         print(
             "Need to specify either upgrade file or skip-upload or only-monitor. Exiting..."
@@ -459,10 +499,23 @@ def main():
     ppdm_uri = f"https://{server}:{api_port}{api_endpoint}"
     token = authenticate(ppdm_uri, username, password)
 
-    # Monitors running upgrade if only-monitor is specified
+    # Getting PPDM configuration
+    print("-> Obtaining PPDM configuration information")
+    check_deployment_type(ppdm_uri, token, baremetal_check)
+    current_ver = check_deployment(ppdm_uri, token)
+
+    # Pre-upgrade checks
+    print("-> Performing pre-upgrade version checks")
+    print("---> Current PPDM version:", current_ver)
+
+    version_checks = perform_version_checks(
+        ppdm_uri, token, current_ver, ppdm_release, upg_file
+    )
+
+    # Handle monitoring-only mode
     if just_monitor:
         if upg_file or skip_upload or ppdm_release:
-            print("---> Ignoring parmaters because only-monitor is specified.")
+            print("---> Ignoring parmaters because only-monitor is specified")
         print(
             "-> only-monitor parameter provided. Monitoring currently running upgrade."
         )
@@ -470,32 +523,23 @@ def main():
         result = monitor_upg_activity(
             upg_uri, upg_token, upg_timeout, True
         )
+
         if result is True:
-            print("\033[92m\033[1m-> PPDM upgraded successfully\033[0m")
+            print("-> PPDM upgraded successfully")
         elif result is False:
-            print("\033[91m\033[1m-> PPDM upgrade failed\033[39m")
+            print("-> PPDM upgrade failed")
             raise SystemExit(1)
-        else:
-            pass
+
         print("-> Making sure PPDM is up and running")
         token = check_ppdm_availability(ppdm_uri, username, password)
         if token:
             print("---> PPDM is available")
             check_deployment(ppdm_uri, token, True)
             raise SystemExit(0)
+
         raise SystemExit("---> PPDM is not available yet, check again later...")
 
-    # Getting PPDM configuration
-    print("-> Obtaining PPDM configuration information")
-    check_deployment_type(ppdm_uri, token, baremetal_check)
-    current_ver = check_deployment(ppdm_uri, token)
-
-    # Performs pre-upgrade version and upgrade package checks
-    print("-> Performing pre-upgrade version checks")
-    print("---> Current PPDM version:", current_ver)
-    version_checks = perform_version_checks(
-        ppdm_uri, token, current_ver, ppdm_release, upg_file
-    )
+    # Upload or reuse upgrade package
     if skip_upload:
         upg_data = version_checks
     else:
@@ -508,53 +552,59 @@ def main():
                 "---> File upload skipped as a package of the same release already exists"
             )
             upg_data = version_checks
-            print(upg_data, type(upg_data))
+
     upg_pkg_id = upg_data["id"]
 
-    # Monitors upgrade package processing activity
+    # Monitor pre-upgrade tasks
     monitor_preupg_activity(ppdm_uri, token, upg_pkg_id, upg_timeout)
 
-    # Executes and monitors pre-check
+    # Execute and monitor pre-check
     print("-> Performing pre-upgrade checks")
     perform_pre_check(ppdm_uri, token, upg_pkg_id)
-    monitor = monitor_preupg_activity(ppdm_uri, token, upg_pkg_id, upg_timeout)
-    if not monitor:
+    if not monitor_preupg_activity(ppdm_uri, token, upg_pkg_id, upg_timeout):
         raise SystemExit(1)
+
     if pre_check:
         print("---> Pre-check parameter provided. Exiting")
         raise SystemExit(0)
 
-    # Upgrading PPDM
+    # Upgrade PPDM
     print("-> Upgrading PPDM to release", upg_data["packageVersion"])
+
     if skip_snapshot:
         upg_data["skipSnapshot"] = True
+
     if not check_hosting_vcenter(ppdm_uri, token):
         print(
             "---> Skipping PPDM VM snapshot because hosting vCenter is not configured"
         )
         upg_data["skipSnapshot"] = True
+
+    # Prepare upgrade payload
     upg_data["state"] = "INSTALLED"
     upg_data["lockboxPassphrase"] = "1234567890abcdef"
     upg_data["upgradeToken"] = upg_token
     upg_data["certificateTrustedByUser"] = True
     upg_data["eula"] = {"productEulaAccepted": True}
+
     if upgrade_ppdm(ppdm_uri, token, upg_data):
         upg_uri = f"https://{server}:{upg_port}"
         result = monitor_upg_activity(
             upg_uri, upg_data["upgradeToken"], upg_timeout
         )
         if result:
-            print("\033[92m\033[1m-> PPDM upgraded successfully\033[0m")
+            print("-> PPDM upgraded successfully")
         else:
-            print("\033[91m\033[1m-> PPDM upgrade failed\033[39m")
+            print("-> PPDM upgrade failed")
             raise SystemExit(1)
     else:
-        print("\033[91m\033[1m-> PPDM upgrade failed\033[39m")
+        print("-> PPDM upgrade failed")
         raise SystemExit(1)
 
-    # PPDM post-upgrade checks
+    # Post-upgrade validation
     print("-> Making sure PPDM is up and running")
     token = check_ppdm_availability(ppdm_uri, username, password)
+
     if token:
         print("---> PPDM is available")
         check_deployment(ppdm_uri, token, True, upg_data["packageVersion"])
