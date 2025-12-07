@@ -133,7 +133,7 @@ def init_rest_call(verb, uri, token, payload=None, params=None):
         print(f"-> Error Connecting to {uri}: {error}")
         raise SystemExit(1) from error
     except requests.exceptions.Timeout as error:
-        print(f"-> Connection timed out {urllib3}: {error}")
+        print(f"-> Connection timed out {uri}: {error}")
         raise SystemExit(1) from error
     except requests.exceptions.RequestException as error:
         if not response or response.status_code in (401, 502):
@@ -504,3 +504,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
