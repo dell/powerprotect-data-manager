@@ -1,31 +1,77 @@
 #!/usr/bin/env python3
+"""PowerProtect Data Manager Deployment Automation Script.
+
+This script automates the deployment of Dell PowerProtect Data Manager
+in VMware vSphere environments using either ovftool or govc.
+
+Author: Idan Kentor <idan.kentor@dell.com>
+Copyright: [2026] [Idan Kentor]
+
+Example Usage:
+    python ppdm_deploy.py -configfile ppdm-config-minimal.json
+    python ppdm_deploy.py -configfile ppdm-prod-config.json -vc -dd
+    python ppdm_deploy.py -configfile ppdm-prod-config.json -vc -dd -ppdm
+    python ppdm_deploy.py -configfile ppdm-config.json -vc -dd -ppdm -cross
+    python ppdm_deploy.py -configfile ppdm-prod-config.json -skipova
+    python ppdm_deploy.py -configfile ppdm_test.json -justova
+    python ppdm_deploy.py -configfile ppdm-prod-config.json -tool govc
+"""
 
 import argparse
 import datetime
 import json
+import logging
+import logging.handlers
 import os
 import platform
-import subprocess
-import time
 import socket
+import subprocess
+import sys
+import tempfile
+import time
 import requests
 import urllib3
 
-
-# This script purpose is to automate PowerProtect Data Manager deployment
-# Author - Idan Kentor <idan.kentor@dell.com>
-# Copyright [2026] [Idan Kentor]
-
-# Examples:
-# python ppdm_deploy.py -configfile ppdm-config-minimal.json
-# python ppdm_deploy.py -configfile ppdm-prod-config.json -vc -dd
-# python ppdm_deploy.py -configfile ppdm-prod-config.json -vc -dd -ppdm
-# python ppdm_deploy.py -configfile ppdm-prod-config.json -vc -dd -ppdm -cross
-# python ppdm_deploy.py -configfile ppdm-prod-config.json -skipova
-# python ppdm_deploy.py -configfile ppdm_test.json -justova
-
-
 urllib3.disable_warnings()
+
+logger = logging.getLogger("ppdm_deploy")
+
+
+def setup_logger(log_file):
+    """Configure logging to file only and log execution start"""
+    max_bytes = 10 * 1024 * 1024  # 10MB
+    log_backup_count = 5
+
+    logger.setLevel(logging.INFO)
+
+    logger.handlers.clear()
+
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=log_backup_count
+        )
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - "
+            "%(funcName)s:%(lineno)d - %(message)s"
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+
+        separator = "=" * 80
+        logger.info(separator)
+        logger.info("PPDM Deployment Script Started")
+        logger.info("Execution Time: %s",
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        logger.info("Script: PowerProtect Data Manager Deployment Automation")
+        logger.info("Command: %s", " ".join(sys.argv))
+        logger.info(separator)
+
+    except (OSError, IOError) as e:
+        print(f"-> Could not create log file: {e}")
+
+    return logger
 
 
 def get_args():
@@ -88,8 +134,15 @@ def get_args():
         "-cross", "--bi-directional",
         dest="cross_connect",
         action="store_true",
-        help="Configure bi-directional \
-                            communication between the two PPDM systems",
+        help="Configure bi-directional communication "
+             "between the two PPDM systems",
+    )
+
+    parser.add_argument(
+        "-tool", "--deployment-tool",
+        choices=["ovftool", "govc"],
+        default="ovftool",
+        help="Choose deployment tool: ovftool (default) or govc"
     )
 
     args = parser.parse_args()
@@ -103,9 +156,9 @@ def read_config(config_file):
         try:
             config = json.load(file_handle)
         except json.decoder.JSONDecodeError as error:
-            print("-> Cannot parse JSON config file:", {error})
+            print(f"-> Cannot parse JSON config file: {error}")
+            logger.error("Cannot parse JSON config file: %s", error)
             raise SystemExit(1) from error
-    file_handle.close()
 
     for key in list(config.keys()):
         if key.startswith("_comment"):
@@ -114,42 +167,52 @@ def read_config(config_file):
     config["ppdmIpV6"] = config.get("ppdmIpV6", False)
 
     if config["ppdmIpV6"]:
-        if not config.get("ppdmIpV6Netmask") or not config.get("ppdmIpV6Gateway"):
+        ipv6_netmask = config.get("ppdmIpV6Netmask")
+        ipv6_gateway = config.get("ppdmIpV6Gateway")
+        if not ipv6_netmask or not ipv6_gateway:
             print("-> Missing IPv6 configuration parameters")
+            logger.error("Missing IPv6 configuration parameters")
             raise SystemExit(1)
 
     if not config["ppdmIpV6"]:
         config["ppdmIpV4"] = config.get("ppdmIpV4", False)
         if not config["ppdmIpV4"]:
-            print("->Missing PPDM IPv4 address")
+            print("-> Missing PPDM IPv4 address")
+            logger.error("Missing PPDM IPv4 address")
             raise SystemExit(1)
         config["ppdmIpV4Netmask"] = config.get("ppdmIpV4Netmask", False)
         config["ppdmIpv4Gateway"] = config.get("ppdmIpv4Gateway", False)
         if not config["ppdmIpV4Netmask"] or not config["ppdmIpv4Gateway"]:
-            print("->Missing IPv4 configuration parameters")
+            print("-> Missing IPv4 configuration parameters")
+            logger.error("Missing IPv4 configuration parameters")
             raise SystemExit(1)
 
     if not config.get("ppdmDatastore"):
-        print("->No Datastore provided, specify DS for PPDM")
+        print("-> No Datastore provided, specify DS for PPDM")
+        logger.error("No Datastore provided, specify DS for PPDM")
         raise SystemExit(1)
 
     if not config.get("ppdmMgmtNetwork"):
-        print("->Management Network Port Group must be specified")
+        print("-> Management Network Port Group must be specified")
+        logger.error("Management Network Port Group must be specified")
         raise SystemExit(1)
 
     if not config.get("ntpServers") or not config.get("dnsServers"):
-        print("->Missing DNS or NTP IP addresses")
+        print("-> Missing DNS or NTP IP addresses")
+        logger.error("Missing DNS or NTP IP addresses")
         raise SystemExit(1)
 
     config["ntpServers"] = config["ntpServers"][0].split(", ")
     config["dnsServers"] = config["dnsServers"][0].split(", ")
     config["license_file"] = config.get("license_file", "trial")
+    config["logFile"] = config.get("logFile", "ppdm_deploy.log")
 
     for encrypt_type in ("protectionEncryption", "replicationEncryption"):
         config[encrypt_type] = config.get(encrypt_type, True)
 
     if not isinstance(config[encrypt_type], bool):
         print(f"-> invalid value for {encrypt_type}")
+        logger.error("invalid value for %s", encrypt_type)
         raise SystemExit(1)
 
     for asset in ("vc", "dd", "peerPpdm"):
@@ -171,7 +234,8 @@ def read_config(config_file):
             else:
                 config[f"{asset}NiceName"] = str(fqdn_ip)
 
-    if all(key in config for key in ("smtpMailServer", "smtpMailFrom", "smtpPort")):
+    smtp_keys = ("smtpMailServer", "smtpMailFrom", "smtpPort")
+    if all(key in config for key in smtp_keys):
         config["smtp"] = True
     else:
         config["smtp"] = False
@@ -192,21 +256,131 @@ def read_config(config_file):
 
 def create_ovftool_command(config):
     """Forms the required ovftool command"""
-    print()
+    logger.info("Creating OVF tool command")
 
-    ppdm_exec = f'{config["ovfToolLocation"]} --noDestinationSSLVerify --skipManifestCheck --acceptAllEulas --powerOn --name="{config["ppdmVmName"]}" '
-    ppdm_exec += f'--diskMode=thin --datastore={config["ppdmDatastore"]} --net:"VM Network"="{config["ppdmMgmtNetwork"]}" '
+    ovf_tool = config["ovfToolLocation"]
+    ppdm_exec = (
+        f'{ovf_tool} --noDestinationSSLVerify --skipManifestCheck '
+        f'--acceptAllEulas --powerOn --name="{config["ppdmVmName"]}" '
+        f'--diskMode=thin --datastore={config["ppdmDatastore"]} '
+        f'--net:"VM Network"="{config["ppdmMgmtNetwork"]}" '
+    )
 
     if not config["ppdmIpV6"]:
-        ppdm_exec += f'--prop:vami.ip0.brs={config["ppdmIpV4"]} --prop:vami.netmask0.brs="{config["ppdmIpV4Netmask"]}" --prop:vami.gateway.brs="{config["ppdmIpv4Gateway"]}" '
+        ppdm_exec += (
+            f'--prop:vami.ip0.brs={config["ppdmIpV4"]} '
+            f'--prop:vami.netmask0.brs="{config["ppdmIpV4Netmask"]}" '
+            f'--prop:vami.gateway.brs="{config["ppdmIpv4Gateway"]}" '
+        )
     else:
-        ppdm_exec += f'--prop:vami.ip0.brs={config["ppdmIpV6"]} --prop:vami.netmask0.brs="{config["ppdmIpV6Netmask"]}" --prop:vami.gateway.brs="{config["ppdmIpV6Gateway"]}" '
+        ppdm_exec += (
+            f'--prop:vami.ip0.brs={config["ppdmIpV6"]} '
+            f'--prop:vami.netmask0.brs="{config["ppdmIpV6Netmask"]}" '
+            f'--prop:vami.gateway.brs="{config["ppdmIpV6Gateway"]}" '
+        )
 
-    ppdm_exec += f'--prop:vami.DNS.brs="{", ".join(config["dnsServers"])}" --prop:vami.fqdn.brs="{config["ppdmFQDN"]}" '
-    ppdm_exec += f'--deploymentOption="{config["platform"]}" "{config["ppdmOVALocation"]}" '
-    ppdm_exec += f'vi://"{config["vcUser"]}":"{config["vcPassword"]}"@{config["vcFQDNorIP"]}/{config["datacenter"]}/host/{config["esxCluster"]}/'
+    ppdm_exec += (
+        f'--prop:vami.DNS.brs="{", ".join(config["dnsServers"])}" '
+        f'--prop:vami.fqdn.brs="{config["ppdmFQDN"]}" '
+        f'--deploymentOption="{config["platform"]}" '
+        f'"{config["ppdmOVALocation"]}" vi://'
+        f'"{config["vcUser"]}":"{config["vcPassword"]}"@'
+        f'{config["vcFQDNorIP"]}/{config["datacenter"]}/'
+        f'host/{config["esxCluster"]}/'
+    )
+
+    safe_exec = ppdm_exec.replace(config["vcPassword"], "*** REDACTED ***")
+    logger.info("OVF Tool command: %s", safe_exec)
 
     return ppdm_exec
+
+
+def create_govc_command(config):
+    """Generate govc command with JSON spec for PPDM deployment"""
+    logger.info("Creating govc command")
+
+    spec = {
+        "DiskProvisioning": "thin",
+        "IPAllocationPolicy": "fixedPolicy",
+        "IPProtocol": "IPv4",
+        "MarkAsTemplate": False,
+        "Name": config["ppdmVmName"],
+        "NetworkMapping": [
+            {
+                "Name": "VM Network",
+                "Network": config["ppdmMgmtNetwork"]
+            }
+        ],
+        "PowerOn": True,
+        "WaitForIP": False
+    }
+
+    if not config["ppdmIpV6"]:
+        spec["PropertyMapping"] = [
+            {
+                "Key": "vami.ip0.PPDM",
+                "Value": config["ppdmIpV4"]
+            },
+            {
+                "Key": "vami.netmask0.PPDM",
+                "Value": config["ppdmIpV4Netmask"]
+            },
+            {
+                "Key": "vami.gateway.brs",
+                "Value": config["ppdmIpv4Gateway"]
+            }
+        ]
+    else:
+        spec["PropertyMapping"] = [
+            {
+                "Key": "vami.ip0.PPDM",
+                "Value": config["ppdmIpV6"]
+            },
+            {
+                "Key": "vami.netmask0.PPDM",
+                "Value": config["ppdmIpV6Netmask"]
+            },
+            {
+                "Key": "vami.gateway.brs",
+                "Value": config["ppdmIpV6Gateway"]
+            }
+        ]
+
+    spec["PropertyMapping"].extend([
+        {
+            "Key": "vami.DNS.brs",
+            "Value": ", ".join(config["dnsServers"])
+        },
+        {
+            "Key": "vami.fqdn.brs",
+            "Value": config["ppdmFQDN"]
+        },
+        {
+            "Key": "deploymentOption",
+            "Value": config["platform"]
+        }
+    ])
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='ppdm_govc_temp', delete=False
+        ) as temp_file:
+            json.dump(spec, temp_file, indent=2)
+            spec_file = temp_file.name
+    except (TypeError, ValueError) as error:
+        logger.error("Failed to create govc spec: %s", error)
+        raise SystemExit(1) from error
+
+    govc_cmd = (
+        f'govc import.ova -options={spec_file} '
+        f'-ds={config["ppdmDatastore"]} '
+        f'-host={config["esxCluster"]} '
+        f'{config["ppdmOVALocation"]}'
+    )
+
+    logger.debug("Govc command: %s", govc_cmd)
+
+    return govc_cmd, spec_file
 
 
 def exec_ova_provisioning(ovf_exec):
@@ -214,10 +388,32 @@ def exec_ova_provisioning(ovf_exec):
     exit_code = os.system(ovf_exec)
 
     if exit_code == 0:
-        print("---> OVA deployment completed successfully")
+        print("-> OVA deployment completed successfully")
+        logger.info("OVA deployment completed successfully")
     else:
-        print("---> OVA deployment failed")
+        print("-> OVA deployment failed")
+        logger.error("OVA deployment failed")
         raise SystemExit(1)
+
+
+def exec_govc_provisioning(govc_exec, spec_file):
+    """Executes govc deployment command"""
+    try:
+        exit_code = os.system(govc_exec)
+
+        if exit_code == 0:
+            print("-> OVA deployment completed successfully")
+            logger.info("Govc OVA deployment completed successfully")
+        else:
+            print("-> OVA deployment failed")
+            logger.error("Govc OVA deployment failed")
+            raise SystemExit(1)
+    finally:
+        try:
+            os.unlink(spec_file)
+            logger.debug("Cleaned up temp spec file: %s", spec_file)
+        except OSError as e:
+            logger.warning("Failed to cleanup temp file %s: %s", spec_file, e)
 
 
 def tcp_check(ip_address):
@@ -265,11 +461,43 @@ def check_api_accessibility(ppdm_ip, ppdm_api_timeout):
     while True:
         if (time.monotonic() - start) > ppdm_api_timeout:
             print("PPDM API check timed out. Exiting")
+            logger.error("PPDM API check timed out. Exiting")
             raise SystemExit(1)
         if init_rest_call("GET", api_endpoint, None, None, None, True):
             return True
         print("---> PPDM API is unreachable. Retrying")
+        logger.info("PPDM API is unreachable. Retrying")
         time.sleep(interval)
+
+
+def sanitize_payload_for_logging(payload_str, uri):
+    """Sanitize sensitive data in payload for logging"""
+    if not payload_str:
+        return payload_str
+
+    sensitive_endpoints = ["/login", "/licenses", "/smtp"]
+    if any(endpoint in uri for endpoint in sensitive_endpoints):
+        return "*** REDACTED ***"
+
+    if "configurations" in uri:
+        try:
+            payload_dict = json.loads(payload_str)
+            safe_payload = payload_dict.copy()
+            for user in safe_payload.get("osUsers", []):
+                if "password" in user:
+                    user["password"] = "*** REDACTED ***"
+                if "newPassword" in user:
+                    user["newPassword"] = "*** REDACTED ***"
+            if "applicationUserPassword" in safe_payload:
+                safe_payload["applicationUserPassword"] = "*** REDACTED ***"
+            for asset in ["dd", "vc", "peerPpdm"]:
+                if f"{asset}Password" in safe_payload:
+                    safe_payload[f"{asset}Password"] = "*** REDACTED ***"
+            return json.dumps(safe_payload)
+        except (json.JSONDecodeError, AttributeError):
+            return payload_str
+
+    return payload_str
 
 
 def init_rest_call(verb, uri, token, payload=None, params=None, deploy=None):
@@ -278,13 +506,22 @@ def init_rest_call(verb, uri, token, payload=None, params=None, deploy=None):
     verify = False
     timeout = 90
 
-    headers = {"Content-Type": "application/json",
-               "Authorization": f"Bearer {token}"}
-
     if uri.endswith("/login") or deploy:
         headers = {"Content-Type": "application/json"}
+    else:
+        headers = {"Content-Type": "application/json",
+                   "Authorization": f"Bearer {token}"}
 
-    payload = json.dumps(payload)
+    # Log headers safely - mask bearer token if present
+    safe_headers = headers.copy()
+    if token:
+        safe_headers["Authorization"] = "Bearer ***"
+
+    logger.info("REST Call: %s %s", verb, uri)
+    logger.info("Headers: %s", safe_headers)
+
+    payload_str = json.dumps(payload)
+    logger.info("Payload: %s", sanitize_payload_for_logging(payload_str, uri))
 
     try:
         if verb.lower() == "get":
@@ -301,7 +538,7 @@ def init_rest_call(verb, uri, token, payload=None, params=None, deploy=None):
                 uri,
                 headers=headers,
                 params=params,
-                data=payload,
+                data=payload_str,
                 verify=verify,
                 timeout=timeout,
             )
@@ -311,20 +548,25 @@ def init_rest_call(verb, uri, token, payload=None, params=None, deploy=None):
         if deploy:
             return False
         print(f"->Error Connecting to {uri}: {error}")
+        logger.error("Error Connecting to %s: %s", uri, error)
         raise SystemExit(1) from error
     except requests.exceptions.Timeout as error:
-        print(f"->Connection timed out {urllib3}: {error}")
+        print(f"-> Connection timed out {urllib3}: {error}")
+        logger.error("Connection timed out %s: %s", urllib3, error)
         raise SystemExit(1) from error
     except requests.exceptions.RequestException as error:
         if deploy and response.status_code in (401, 502):
             return False
-        print(
-            f"->The call {response.request.method} {response.url} failed with exception:{error}"
-        )
+        logger.error("The call %s %s failed with exception: %s",
+                     response.request.method, response.url, error)
+
+    logger.info("Response Code: %s", response.status_code)
+    logger.debug("Response: %s", response.text)
 
     if response.status_code not in code:
         raise requests.exceptions.HTTPError(
-            f"-> Failed to query {uri}, code: {response.status_code}, body: {response.text}"
+            f"Failed to query {uri}, code: {response.status_code}, "
+            f"body: {response.text}"
         )
 
     if not response.content:
@@ -346,12 +588,15 @@ def check_deployment(ppdm_uri, token):
     nodes = init_rest_call("GET", nodes_uri, token)
 
     if not nodes or "content" not in nodes:
+        logger.error("Cannot query the Data Manager server. Exiting...")
         raise SystemExit("Cannot query the Data Manager server. Exiting...")
 
     if nodes["content"][0]["status"] != "PENDING":
+        logger.error("PPDM is not available for deployment. Exiting...")
         raise SystemExit("PPDM is not available for deployment. Exiting...")
 
     print("---> PPDM is deployment ready")
+    logger.info("PPDM is deployment ready")
     return nodes["content"][0]["id"]
 
 
@@ -363,6 +608,7 @@ def get_deploy_config(ppdm_uri, token, node_id):
     deploy_config = init_rest_call("GET", config_uri, token)
 
     if not deploy_config or "content" not in deploy_config:
+        logger.error("Cannot query the Data Manager server. Exiting...")
         raise SystemExit("Cannot query the Data Manager server. Exiting...")
 
     for config_item in deploy_config.get("content"):
@@ -371,6 +617,7 @@ def get_deploy_config(ppdm_uri, token, node_id):
 
     if not desired_config:
         print("Could not detect a valid configuration. Exiting.")
+        logger.error("Could not detect a valid configuration. Exiting.")
         raise SystemExit(1)
 
     return desired_config
@@ -386,9 +633,11 @@ def accept_eula(eula_type, ppdm_uri, token):
 
     if not response.get("accepted"):
         print(f"{eula_type} EULA could not be accepted, exiting...")
+        logger.error("%s EULA could not be accepted, exiting...", eula_type)
         raise SystemExit(1)
 
     print(f"---> {eula_type} EULA accepted")
+    logger.info("%s EULA accepted", eula_type)
     return True
 
 
@@ -396,6 +645,7 @@ def apply_license(license_file, ppdm_uri, token):
     """Apply PPDM license from file"""
     if license_file.strip().lower() == "trial":
         print("-> Using Trial license")
+        logger.info("Using Trial license")
         return True
 
     try:
@@ -403,10 +653,12 @@ def apply_license(license_file, ppdm_uri, token):
             license_content = file_handle.read().strip()
     except (OSError, FileNotFoundError):
         print("-> Could not read license file. Using Trial license")
+        logger.warning("Could not read license file. Using Trial license")
         return True
 
     if not license_content:
         print("-> License file is empty. Using Trial license")
+        logger.warning("License file is empty. Using Trial license")
         return True
 
     license_uri = f"{ppdm_uri}/licenses"
@@ -416,9 +668,11 @@ def apply_license(license_file, ppdm_uri, token):
 
     if response.get("status") == "VALID":
         print("-> Using Capacity license")
+        logger.info("Using Capacity license")
         return True
 
     print("-> License not accepted. Using Trial license")
+    logger.warning("License not accepted. Using Trial license")
     return False
 
 
@@ -442,6 +696,7 @@ def config_smtp(config, ppdm_uri, token):
         return True
 
     print("Could not apply SMTP settings. Exiting")
+    logger.error("Could not apply SMTP settings. Exiting")
     return False
 
 
@@ -468,22 +723,26 @@ def apply_encryption_settings(config, ppdm_uri, token):
     try:
         if response["id"] != encr_payload["id"]:
             print("Could not apply encryption settings. Exiting")
+            logger.error("Could not apply encryption settings. Exiting")
             raise SystemExit(1)
         for setting in response["properties"]:
             if setting["name"] == "enableProtectionEncryption":
-                if config["replicationEncryption"] != bool(
-                    setting["value"]
-                ):
+                if config["replicationEncryption"] != bool(setting["value"]):
                     print("Could not apply encryption settings. Exiting")
+                    logger.error(
+                        "Could not apply encryption settings. Exiting"
+                    )
                     raise SystemExit(1)
             elif setting["name"] == "enableReplicationEncryption":
-                if config["protectionEncryption"] != bool(
-                    setting["value"]
-                ):
+                if config["protectionEncryption"] != bool(setting["value"]):
                     print("Could not apply encryption settings. Exiting")
+                    logger.error(
+                        "Could not apply encryption settings. Exiting"
+                    )
                     raise SystemExit(1)
     except KeyError:
         print("Could not apply encryption settings. Exiting")
+        logger.error("Could not apply encryption settings. Exiting")
         raise SystemExit(1) from KeyError
 
     return True
@@ -494,9 +753,9 @@ def get_time_zone(config, ppdm_uri, token):
     local_tz = datetime.datetime.now().astimezone().tzinfo
     local_tz_name = str(local_tz).split(" ", maxsplit=1)[0]
 
-    config["timeZone"] = (config.get("timeZone")
-                          or config.get("time_zone")
-                          or local_tz_name)
+    config["timeZone"] = (
+        config.get("timeZone") or config.get("time_zone") or local_tz_name
+    )
 
     timezones = {"eastern": "EST",
                  "et": "EST",
@@ -521,6 +780,7 @@ def get_time_zone(config, ppdm_uri, token):
                 break
 
     print(f"-> Time zone detected: {config['timeZone']}")
+    logger.info("Time zone detected: %s", config['timeZone'])
     return config
 
 
@@ -532,8 +792,10 @@ def build_deployment_config(config, deploy_config):
         if "nslookupSuccess" in network:
             if network["nslookupSuccess"]:
                 print("-> Name resolution completed successfully")
+                logger.info("Name resolution completed successfully")
             else:
                 print("-> Warning: name resolution issues")
+                logger.warning("Warning: name resolution issues")
             break
 
     deploy_config["ntpServers"] = config["ntpServers"]
@@ -574,6 +836,7 @@ def monitor_deploy_activity(
     username = "admin"
 
     print(f"---> Deploying configuration {deploy_config_id}")
+    logger.info("Deploying configuration %s", deploy_config_id)
 
     while True:
         if (time.monotonic() - start) > ppdm_deploy_timeout:
@@ -582,7 +845,9 @@ def monitor_deploy_activity(
 
         if not response:
             if not requires_auth:
-                response = init_rest_call("GET", monitor_uri, token, None, None, True)
+                response = init_rest_call(
+                    "GET", monitor_uri, token, None, None, True
+                )
             else:
                 token = authenticate(ppdm_uri, username, admin_pwd)
                 try:
@@ -599,11 +864,18 @@ def monitor_deploy_activity(
         percent_complete = response.get("percentageCompleted", 0)
         if status == "SUCCESS":
             print(f"---> Deployment status {status} {percent_complete}%")
+            logger.info(
+                "Deployment status %s %s%%", status, percent_complete
+            )
             return True
         if status == "ERROR":
-            print("->Action failed:", json.dumps(response))
+            print(f"->Action failed: {json.dumps(response)}")
+            logger.error("Action failed: %s", json.dumps(response))
             break
         print(f"---> Deployment status {status} {percent_complete}%")
+        logger.info(
+            "Deployment status %s %s%%", status, percent_complete
+        )
         time.sleep(poll_interval)
 
     return False
@@ -614,7 +886,7 @@ def authenticate(ppdm_uri, username, password):
     login_uri = f"{ppdm_uri}/login"
 
     login_payload = {"username": username, "password": password}
-    token = init_rest_call("POST", login_uri, login_payload, login_payload)
+    token = init_rest_call("POST", login_uri, None, login_payload)
 
     return token
 
@@ -633,6 +905,7 @@ def accept_certificate(asset_type, config, ppdm_uri, token):
 
     if not certs or not isinstance(certs, list):
         print(f"-> No certificate response for {asset_type.upper()}")
+        logger.warning("No certificate response for %s", asset_type.upper())
         return False
 
     cert = certs[0]
@@ -640,6 +913,9 @@ def accept_certificate(asset_type, config, ppdm_uri, token):
 
     if not cert_id:
         print(f"-> Certificate response missing 'id' for {asset_type.upper()}")
+        logger.warning(
+            "Certificate response missing 'id' for %s", asset_type.upper()
+        )
         return False
 
     if cert.get("state") == "ACCEPTED":
@@ -655,7 +931,11 @@ def accept_certificate(asset_type, config, ppdm_uri, token):
     elif bool(cert):
         return True
 
-    print(f"Cannot add {asset_type.upper()}. Could not accept certificate")
+    print(f"Cannot add {asset_type.upper()}. "
+          f"Could not accept certificate")
+    logger.error(
+        f"Cannot add {asset_type.upper()}. Could not accept certificate"
+    )
     return False
 
 
@@ -692,11 +972,13 @@ def config_auto_support(ppdm_uri, token):
     response = init_rest_call("GET", support_uri, token)
     if not isinstance(response, dict):
         print("-> AutoSupport could not be configured")
+        logger.error("AutoSupport could not be configured")
         return False
 
     properties = response.get("properties")
     if not isinstance(properties, list) or not response.get("id"):
         print("-> AutoSupport could not be configured")
+        logger.error("AutoSupport could not be configured")
         return False
 
     for element in properties:
@@ -709,9 +991,11 @@ def config_auto_support(ppdm_uri, token):
 
     if response.get("id"):
         print("-> AutoSupport configured successfully")
+        logger.info("AutoSupport configured successfully")
         return True
 
     print("-> AutoSupport could not be configured")
+    logger.error("AutoSupport could not be configured")
     return False
 
 
@@ -727,12 +1011,14 @@ def register_asset_source(asset_type, config, ppdm_uri, token):
         asset_type_alt2 = "Data Domain"
     else:
         print(f"Unsupported asset source type: {asset_type}")
+        logger.error("Unsupported asset source type: %s", asset_type)
         return False
 
     creds_id = add_credentials(asset_type, config, ppdm_uri, token)
 
     if not creds_id:
         print(f"Could not add {asset_type_alt2} credentials")
+        logger.error("Could not add %s credentials", asset_type_alt2)
         return False
 
     asset_source_id = f"{ppdm_uri}/inventory-sources"
@@ -748,24 +1034,30 @@ def register_asset_source(asset_type, config, ppdm_uri, token):
     if asset_type == "DATADOMAIN":
         payload["type"] = "EXTERNALDATADOMAIN"
     elif asset_type == "VCENTER":
-        vc_details = {"hosting": True,
-                      "vSphereUiIntegration": config["noVcPlugin"]}
+        vc_details = {
+            "hosting": True,
+            "vSphereUiIntegration": config["noVcPlugin"]
+        }
         payload["details"] = {"vCenter": vc_details}
 
     response = init_rest_call("POST", asset_source_id, token, payload)
 
     if isinstance(response, dict) and response.get("id"):
         print(f"-> {asset_type_alt2} registered successfully")
+        logger.info("%s registered successfully", asset_type_alt2)
         details = response.get("details")
         vc = details.get("vCenter") if isinstance(details, dict) else None
         if isinstance(vc, dict):
             if vc.get("hosting"):
                 print("--> Hosting vCenter configured successfully")
+                logger.info("Hosting vCenter configured successfully")
             if not config["noVcPlugin"] and not vc.get("vSphereUiIntegration"):
                 print("--> PPDM vCenter plugin installation was skipped")
+                logger.info("PPDM vCenter plugin installation was skipped")
         return True
 
     print(f"-> {asset_type_alt2} could not be registered")
+    logger.error("%s could not be registered", asset_type_alt2)
     return False
 
 
@@ -776,6 +1068,7 @@ def monitor_activity(ppdm_uri, token, activity_id, ppdm_monitor_timeout):
     start = time.monotonic()
 
     print(f"---> Monitoring activity ID {activity_id}")
+    logger.info("Monitoring activity ID %s", activity_id)
 
     while True:
         if (time.monotonic() - start) > ppdm_monitor_timeout:
@@ -783,23 +1076,31 @@ def monitor_activity(ppdm_uri, token, activity_id, ppdm_monitor_timeout):
         response = init_rest_call("GET", monitor_uri, token)
         if not response:
             try:
-                response = init_rest_call("GET", monitor_uri, token, None, None, True)
+                response = init_rest_call(
+                    "GET", monitor_uri, token, None, None, True
+                )
             except (SystemExit, requests.exceptions.RequestException):
                 time.sleep(30)
-                response = init_rest_call("GET", monitor_uri, token, None, None, True)
+                response = init_rest_call(
+                    "GET", monitor_uri, token, None, None, True
+                )
         state = response.get("state")
         progress = response.get("progress")
         if state == "COMPLETED":
             result = response.get("result")
             if result.get("status") == "FAILED":
                 print("---> Activity status FAILED")
+                logger.error("Activity status FAILED")
                 return False
             print(f"---> Activity status {state} {progress}%")
+            logger.info("Activity status %s %s%%", state, progress)
             return True
         if state == "ERROR":
-            print("->Action failed:", json.dumps(response))
+            print(f"->Action failed: {json.dumps(response)}")
+            logger.error("Action failed: %s", json.dumps(response))
             break
         print(f"---> Activity status {state} {progress}%")
+        logger.info("Activity status %s %s%%", state, progress)
         time.sleep(interval)
 
     return False
@@ -825,9 +1126,11 @@ def connect_peer_ppdm(config, ppdm_uri, token):
         activity_id = response.get("activityId")
         if monitor_activity(ppdm_uri, token, activity_id, monitor_timeout):
             print("---> Peer PPDM registered successfully")
+            logger.info("Peer PPDM registered successfully")
             return True
 
     print("---> Peer PPDM could not be registered")
+    logger.error("Peer PPDM could not be registered")
     return False
 
 
@@ -841,13 +1144,16 @@ def main():
 
     config = read_config(config_file)
 
+    # Initialize logger (includes execution start logging)
+    setup_logger(config["logFile"])
+
     # Const definition
     api_endpoint = "/api/v2"
     ppdm_api_port = 8443
     default_vc_port = 443
     default_dd_port = 3009
     config["ppdmIpTimeout"] = 300
-    config["ppdm_api_timeout"] = 1200
+    config["ppdmApiTimeout"] = 1200
     config["ppdmDeployTimeout"] = 600
     config["ppdmMonitorTimeout"] = 180
     username, default_api_pwd = "admin", "admin"
@@ -861,27 +1167,41 @@ def main():
     else:
         ppdm_ip = config["ppdmIpV6"]
 
-    # Create the ovftool command for PPDM deployment
+    # Create the deployment command for PPDM
     if not skip_ova:
-        ppdm_ovf_exec = create_ovftool_command(config)
-        # Execute PPDM OVA Deployment
-        print("-> Provisioning PPDM from OVA")
-        exec_ova_provisioning(ppdm_ovf_exec)
+        if args.deployment_tool == "ovftool":
+            ppdm_ovf_exec = create_ovftool_command(config)
+            # Execute PPDM OVA Deployment
+            print("-> Provisioning PPDM from OVA")
+            logger.info("Provisioning PPDM from OVA")
+            exec_ova_provisioning(ppdm_ovf_exec)
+        else:
+            ppdm_ovf_exec, spec_file = create_govc_command(config)
+            # Execute PPDM OVA Deployment
+            print("-> Provisioning PPDM from OVA using govc")
+            logger.info("Provisioning PPDM from OVA using govc")
+            exec_govc_provisioning(ppdm_ovf_exec, spec_file)
 
     # Break the flow if the justOva parameter is specified
     if just_ova:
+        logger.info("Just-ova parameter provided. Exiting")
         print("-> Just-ova parameter provided. Exiting")
         raise SystemExit(0)
 
     # Check connectivity to PPDM IP and API
     print("-> Checking connectivity to PPDM")
+    logger.info("Checking connectivity to PPDM")
     if not check_connectivity(ppdm_ip, config["ppdmIpTimeout"]):
         print(f"---> PPDM IP {ppdm_ip} is unreachable")
+        logger.error("PPDM IP %s is unreachable", ppdm_ip)
     else:
         print(f"---> PPDM IP {ppdm_ip} is reachable")
+        logger.info("PPDM IP %s is reachable", ppdm_ip)
         print("-> Checking PPDM API readiness")
-        if check_api_accessibility(ppdm_ip, config["ppdm_api_timeout"]):
+        logger.info("Checking PPDM API readiness")
+        if check_api_accessibility(ppdm_ip, config["ppdmApiTimeout"]):
             print("---> PPDM API is available")
+            logger.info("PPDM API is available")
 
     # Login to the PPDM API
     ppdm_uri = f"https://{ppdm_ip}:{ppdm_api_port}{api_endpoint}"
@@ -889,33 +1209,40 @@ def main():
 
     # Get PPDM configuration
     print("-> Obtaining PPDM configuration information")
+    logger.info("Obtaining PPDM configuration information")
     node_id = check_deployment(ppdm_uri, token)
     deploy_config = get_deploy_config(ppdm_uri, token, node_id)
 
     # Accept PPDM EULA
     print("-> Accepting PPDM EULA")
+    logger.info("Accepting PPDM EULA")
     accept_eula("PPDM", ppdm_uri, token)
 
     # Apply PPDM License
     print("-> Applying license")
+    logger.info("Applying license")
     apply_license(config["license_file"], ppdm_uri, token)
 
     # Configure SMTP
     if config["smtp"]:
         print("-> Applying SMTP settings")
+        logger.info("Applying SMTP settings")
         config_smtp(config, ppdm_uri, token)
 
     # Apply encryption settings
     print("-> Configuring encryption")
+    logger.info("Configuring encryption")
     apply_encryption_settings(config, ppdm_uri, token)
 
     # Build deployment configuration
     print("-> Building PPDM deployment configuration")
+    logger.info("Building PPDM deployment configuration")
     config = get_time_zone(config, ppdm_uri, token)
     deploy_config = build_deployment_config(config, deploy_config)
 
     # Deploy PPDM
     print("-> Deploying PPDM")
+    logger.info("Deploying PPDM")
     if bootstrap_ppdm_deployment(ppdm_uri, token, deploy_config):
         result = monitor_deploy_activity(
             ppdm_uri,
@@ -926,11 +1253,14 @@ def main():
         )
         if result:
             print("-> PPDM deployed successfully")
+            logger.info("PPDM deployed successfully")
         else:
             print("-> PPDM deployment failed")
+            logger.error("PPDM deployment failed")
             raise SystemExit(1)
     else:
         print("-> PPDM deployment failed")
+        logger.error("PPDM deployment failed")
         raise SystemExit(1)
 
     # Post-install steps - AutoSupport, VC, DD and peer PPDM
@@ -944,9 +1274,11 @@ def main():
         post_install_check = True
     if post_install_check:
         print("-> Initiating post-install tasks")
+        logger.info("Initiating post-install tasks")
         token = authenticate(ppdm_uri, username, config["ppdmAdminPwd"])
     if config["autoSupport"]:
         print("-> Accepting TELEMETRY EULA")
+        logger.info("Accepting TELEMETRY EULA")
         accept_eula("TELEMETRY", ppdm_uri, token)
         config_auto_support(ppdm_uri, token)
     if register_vc:
@@ -959,6 +1291,9 @@ def main():
                 register_asset_source("VCENTER", config, ppdm_uri, token)
         else:
             print("-> Missing vCenter details, skipping vCenter registration")
+            logger.warning(
+                "Missing vCenter details, skipping vCenter registration"
+            )
     if add_dd:
         config["ddPort"] = config.get("ddPort")
         if not config["ddPort"]:
@@ -968,6 +1303,9 @@ def main():
                 register_asset_source("DATADOMAIN", config, ppdm_uri, token)
         else:
             print("-> Missing Data Domain details, skipping DD registration")
+            logger.warning(
+                "Missing Data Domain details, skipping DD registration"
+            )
     if connect_peer:
         config["peerPpdmPort"] = config.get("peerPpdmPort")
         if not config["peerPpdmPort"]:
@@ -975,16 +1313,22 @@ def main():
         if config["peerPpdmValid"]:
             if accept_certificate("peerPpdm", config, ppdm_uri, token):
                 print("-> Connecting peer PPDM host")
+                logger.info("Connecting peer PPDM host")
                 qr_enabled = connect_peer_ppdm(config, ppdm_uri, token)
         else:
             print("-> Missing peer PPDM details, skipping configuration")
+            logger.warning("Missing peer PPDM details, skipping configuration")
             qr_enabled = False
     else:
         qr_enabled = False
-    # Configure bi-directional communication only if selected and there is a peer PPDM
+    # Configure bi-directional comm only if there is a peer PPDM
     if qr_enabled and ppdm_cross_connect:
         print("-> Configuring bi-directional replication direction")
-        peer_ppdm_uri = f"https://{config['peerPpdmFQDNorIP']}:{ppdm_api_port}{api_endpoint}"
+        logger.info("Configuring bi-directional replication direction")
+        peer_fqdn = config['peerPpdmFQDNorIP']
+        peer_ppdm_uri = (
+            f"https://{peer_fqdn}:{ppdm_api_port}{api_endpoint}"
+        )
         peer_token = authenticate(
             peer_ppdm_uri, config["peerPpdmUser"], config["peerPpdmPassword"]
         )
@@ -992,11 +1336,15 @@ def main():
         peer_config["peerPpdmPort"] = "8443"
         peer_config["peerPpdmUser"] = "admin"
         peer_config["peerPpdmPassword"] = config["ppdmAdminPwd"]
-        peer_config["peerPpdmNiceName"] = "PPDM" + config["ppdmFQDN"].split(".")[0]
-        if accept_certificate("peerPpdm", peer_config, peer_ppdm_uri, peer_token):
+        ppdm_name = "PPDM" + config["ppdmFQDN"].split(".")[0]
+        peer_config["peerPpdmNiceName"] = ppdm_name
+        if accept_certificate(
+            "peerPpdm", peer_config, peer_ppdm_uri, peer_token
+        ):
             connect_peer_ppdm(peer_config, peer_ppdm_uri, peer_token)
 
     print("-> All tasks have been completed")
+    logger.info("All tasks have been completed")
 
 
 if __name__ == "__main__":

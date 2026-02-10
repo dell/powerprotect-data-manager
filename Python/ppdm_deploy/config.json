@@ -2,6 +2,7 @@
    "_comment": "PPDM Config",
    "ppdmOVALocation": "C:\\Downloads\\dellemc-ppdm-sw-19.14.0-20.ova",
    "ovfToolLocation": "ovftool",
+   "logFile": "ppdm_deploy.log",
    "ppdmVmName": "PPDM",
    "timeZone": "London",
    "ntpServers": ["10.0.0.2, 10.0.0.3"],
