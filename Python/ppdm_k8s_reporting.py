@@ -6,6 +6,9 @@ Reports backup statistics for protected Kubernetes namespaces
 including PVCs and VMs, backup counts, first/last backup times,
 and protection capacity.
 
+Author: Idan Kentor <idan.kentor@dell.com>
+Copyright: Copyright [2026] [Idan Kentor]
+
 Example usage:
     python ppdm_k8s_reporting.py -ppdm 10.0.0.1 -p "password" \
       -cl k8s_prod1
@@ -892,3 +895,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
