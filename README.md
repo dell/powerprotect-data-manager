@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.x-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![PowerShell](https://img.shields.io/badge/powershell-7.x-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green?logo=apache&logoColor=white)](LICENSE)
-[![API Docs](https://img.shields.io/badge/API-Dell%20Developer%20Portal-orange?logo=swagger&logoColor=white)](https://developer.dell.com/apis/4378/versions/20.1.0)
+[![API Docs](https://img.shields.io/badge/API-Dell%20Developer%20Portal-orange?logo=swagger&logoColor=white)](https://developer.dell.com/apis/4378)
 
 A collection of automation scripts for [Dell PowerProtect Data Manager](https://www.dell.com/en-us/dt/data-protection/powerprotect-data-manager.htm) covering asset management, protection policies, backup, recovery, Kubernetes data protection, and lifecycle operations — all via the PPDM REST API.
 
