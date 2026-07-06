@@ -140,7 +140,7 @@ python restorevmorig.py -s 10.0.0.1 -usr admin -pwd "myPassword!" \
 | --- | --- |
 | [`ppdm_k8s_self_service.py`](Python/ppdm_k8s_self_service.py) | Self-service backup and restore for Kubernetes namespaces. Supports restore-to-namespace (RTN), restore-to-existing (RTE), and cross-cluster restore. Outputs results as text, JSON, or YAML. |
 | [`ppdm_k8s_reporting.py`](Python/ppdm_k8s_reporting.py) | Backup statistics report for protected Kubernetes namespaces — PVC counts, backup history, protection capacity, and unprotected namespace detection. Outputs as table, JSON, YAML, or CSV. |
-| [`ppdm_exclude_pvc.py`](Python/ppdm_exclude_pvc.py) | List, exclude, or include specific Persistent Volume Claims (PVCs) from Kubernetes backup policies. Supports batch exclusion via annotations and both the Python `kubernetes` client and native `kubectl`. |
+| [`ppdm_exclude_pvc.py`](Python/ppdm_exclude_pvc.py) | List, exclude, or include specific Persistent Volume Claims (PVCs) from Kubernetes backup policies. Supports batch exclusion via PVC annotations, namespace and cluster filtering, OpenShift (`-oc`), and both the Python `kubernetes` client and native `kubectl`/`oc`. |
 | [`credsmgmt.py`](Python/credsmgmt.py) | Add or remove Kubernetes service-account token credentials in PPDM used for cluster authentication. |
 
 **Example — back up a Kubernetes namespace:**
@@ -163,6 +163,22 @@ python ppdm_k8s_self_service.py -ppdm 10.0.0.1 -envpassword \
 ```bash
 python ppdm_k8s_reporting.py -ppdm 10.0.0.1 -envpassword \
   -cl k8s_prod1 -o json -f report.json
+```
+
+**Example — exclude a PVC from backup:**
+
+```bash
+# Exclude a specific PVC and print the matching annotate command
+python ppdm_exclude_pvc.py -ppdm 10.0.0.1 -p "myPassword!" \
+  -a exclude -pvc mysql-data -ns mysql
+
+# Batch process all PVCs annotated with ppdm.config.exclude/pvc=yes|no
+python ppdm_exclude_pvc.py -ppdm 10.0.0.1 -envpassword \
+  -a batch -ns mysql -native
+
+# Print the annotate command only — no PPDM login needed
+python ppdm_exclude_pvc.py -ppdm 10.0.0.1 \
+  -a print-cmd -pvc mysql-data -ns mysql
 ```
 
 ---
