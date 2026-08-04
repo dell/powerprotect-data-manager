@@ -1,10 +1,10 @@
 # Dell PowerProtect Data Manager — Automation Solutions
 
-[![Platform](https://img.shields.io/badge/platform-PowerProtect%20Data%20Manager-blue?logo=dell&logoColor=white)](https://www.dell.com/en-us/dt/data-protection/powerprotect-data-manager.htm)
-[![Python](https://img.shields.io/badge/python-3.x-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![PowerShell](https://img.shields.io/badge/powershell-7.x-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
+[![Platform](https://img.shields.io/badge/platform-PowerProtect%20Data%20Manager-blue?logo=dell&logoColor=white)](<https://www.dell.com/en-us/dt/data-protection/powerprotect-data-manager.htm>)
+[![Python](https://img.shields.io/badge/python-3.x-blue?logo=python&logoColor=white)](<https://www.python.org/>)
+[![PowerShell](https://img.shields.io/badge/powershell-7.x-blue?logo=powershell&logoColor=white)](<https://github.com/PowerShell/PowerShell>)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green?logo=apache&logoColor=white)](LICENSE)
-[![API Docs](https://img.shields.io/badge/API-Dell%20Developer%20Portal-orange?logo=swagger&logoColor=white)](https://developer.dell.com/apis/4378)
+[![API Docs](https://img.shields.io/badge/API-Dell%20Developer%20Portal-orange?logo=swagger&logoColor=white)](<https://developer.dell.com/apis/4378>)
 
 A collection of automation solutions for [Dell PowerProtect Data Manager](https://www.dell.com/en-us/dt/data-protection/powerprotect-data-manager.htm) covering asset management, protection policies, backup, recovery, Kubernetes data protection, and lifecycle operations — all via the PPDM REST API.
 
@@ -15,13 +15,14 @@ A collection of automation solutions for [Dell PowerProtect Data Manager](https:
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Python Scripts](#python-scripts)
-  - [Protection Policies and Backup](#protection-policies-and-backup)
-  - [Recovery](#recovery)
-  - [Kubernetes](#kubernetes)
-  - [Deployment and Upgrade](#deployment-and-upgrade)
-  - [Asset and Infrastructure Management](#asset-and-infrastructure-management)
+- [Protection Policies and Backup](#protection-policies-and-backup)
+- [Recovery](#recovery)
+- [Kubernetes](#kubernetes)
+- [Deployment and Upgrade](#deployment-and-upgrade)
+- [Asset and Infrastructure Management](#asset-and-infrastructure-management)
 - [Authentication Helper](#authentication-helper)
 - [Documentation](#documentation)
+- [Contributing](#contributing)
 - [Authors](#authors)
 
 ---
@@ -140,6 +141,7 @@ python restorevmorig.py -s 10.0.0.1 -usr admin -pwd "myPassword!" \
 | --- | --- |
 | [`ppdm_k8s_self_service.py`](Python/ppdm_k8s_self_service.py) | Self-service backup and restore for Kubernetes namespaces. Supports restore-to-namespace (RTN), restore-to-existing (RTE), and cross-cluster restore. Outputs results as text, JSON, or YAML. |
 | [`ppdm_k8s_reporting.py`](Python/ppdm_k8s_reporting.py) | Backup statistics report for protected Kubernetes namespaces — PVC counts, backup history, protection capacity, and unprotected namespace detection. Outputs as table, JSON, YAML, or CSV. |
+| [`ppdm_k8s_config_sync.py`](Python/ppdm_k8s_config_sync.py) | Sync Kubernetes asset source configuration (pod configs, controller configs) from a source cluster to one or more targets within a PPDM instance or across two instances. Supports `list`, `diff`, and `sync` actions with dry-run, section filtering, and JSON export. |
 | [`ppdm_exclude_pvc.py`](Python/ppdm_exclude_pvc.py) | List, exclude, or include specific Persistent Volume Claims (PVCs) from Kubernetes backup policies. Supports batch exclusion via PVC annotations, namespace and cluster filtering, OpenShift (`-oc`), and both the Python `kubernetes` client and native `kubectl`/`oc`. |
 | [`credsmgmt.py`](Python/credsmgmt.py) | Add or remove Kubernetes service-account token credentials in PPDM used for cluster authentication. |
 
@@ -163,6 +165,22 @@ python ppdm_k8s_self_service.py -ppdm 10.0.0.1 -envpassword \
 ```bash
 python ppdm_k8s_reporting.py -ppdm 10.0.0.1 -envpassword \
   -cl k8s_prod1 -o json -f report.json
+```
+
+**Example — sync K8s asset source configuration:**
+
+```bash
+# Show configuration differences between clusters
+python ppdm_k8s_config_sync.py -ppdm 10.0.0.1 -envpassword \
+  -a diff -source k8s_prod1 -targets all
+
+# Sync pod configs from source to a specific target (dry-run)
+python ppdm_k8s_config_sync.py -ppdm 10.0.0.1 -envpassword \
+  -a sync -source k8s_prod1 -targets k8s_dr1 --pod-config
+
+# Apply sync across two PPDM instances
+python ppdm_k8s_config_sync.py -ppdm 10.0.0.1 -envpassword \
+  -a sync -source k8s_prod1 -target-ppdm 10.0.0.2 -targets all -apply -q
 ```
 
 **Example — exclude a PVC from backup:**
@@ -242,7 +260,7 @@ python ppdm_k8s_reporting.py -ppdm 10.0.0.1 -envpassword \
   -cl k8s_prod1 -o json
 ```
 
-Scripts that support this flag include `ppdm_k8s_self_service.py`, `ppdm_k8s_reporting.py`, and `ppdm_exclude_pvc.py`.
+Scripts that support this flag include `ppdm_k8s_self_service.py`, `ppdm_k8s_reporting.py`, `ppdm_k8s_config_sync.py`, `ppdm_exclude_pvc.py`, and `ppdm_upgrade.py`.
 
 ### Option 2 — Encrypted Credential File (persistent)
 
@@ -262,6 +280,15 @@ python secure_login_helper.py \
 ```
 
 Requires: `pip install cryptography`
+
+---
+
+## Contributing
+
+Found a bug, have a feature request, or want to suggest an improvement?
+[Open an issue](https://github.com/dell/powerprotect-data-manager/issues) or start a
+[discussion](https://github.com/dell/powerprotect-data-manager/discussions) — bug reports,
+enhancement ideas, and general feedback are all welcome.
 
 ---
 
