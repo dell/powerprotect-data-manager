@@ -424,6 +424,17 @@ def get_api_base(server, token):
     return f"https://{server}:8443/api/v3"
 
 
+def get_asset_cluster(asset):
+    """Extract cluster id/name from an asset's inventory source"""
+    clusters = asset.get("inventorySourceRefs", [])
+    if not clusters:
+        return {}
+    return {
+        "id": clusters[0].get("id", ""),
+        "name": clusters[0].get("name", "Unknown")
+    }
+
+
 def get_namespace_asset(uri, token, namespace, cluster=None):
     """Get namespace asset ID, protection policy, and cluster info"""
     query = (
@@ -431,7 +442,7 @@ def get_namespace_asset(uri, token, namespace, cluster=None):
         f'name eq "{namespace}"'
     )
     if cluster:
-        query += f' and inventorySourceRef.name eq "{cluster}"'
+        query += f' and inventorySourceRefs.name eq "{cluster}"'
 
     endpoint = f"{uri}/assets"
     params = {"filter": query}
@@ -444,33 +455,23 @@ def get_namespace_asset(uri, token, namespace, cluster=None):
             + (f" on cluster '{cluster}'" if cluster else "")
         )
 
-    content = response["content"]
+    assets = response["content"]
 
-    if len(content) > 1 and not cluster:
-        names = []
-        for a in content:
-            names.append(a.get("inventorySourceRef", {}).get("name", "?"))
+    if len(assets) > 1 and not cluster:
+        cluster_names = [get_asset_cluster(a).get("name", "Unknown")
+                         for a in assets]
         msg = (
             f"Namespace '{namespace}' found on multiple clusters: "
-            f"{', '.join(names)}. Use -cl <cluster-name> to specify."
+            f"{', '.join(cluster_names)}. Use -cl <cluster-name> to specify."
         )
         logger.error(msg)
         raise SystemExit(msg)
 
-    asset = content[0]
-    cluster_info = {}
-    inventory_source = asset.get("inventorySourceRef", {})
-
-    if inventory_source.get("id"):
-        cluster_info = {
-            "id": inventory_source.get("id", ""),
-            "name": inventory_source.get("name", "Unknown")
-        }
-
+    asset = assets[0]
     return (
         asset["id"],
         asset.get("protectionPolicyRef", {}),
-        cluster_info
+        get_asset_cluster(asset)
     )
 
 
@@ -575,7 +576,7 @@ def namespace_exists(uri, token, namespace):
 def get_cluster_id(uri, token, cluster_name):
     """Resolve K8s cluster name to inventory source ID"""
     endpoint = f"{uri}/inventory-sources"
-    params = {"filter": 'type eq "KUBERNETES_CLUSTER"'}
+    params = {"filter": 'type eq "KUBERNETES"'}
 
     response = init_rest_call(
         "GET", endpoint, token, params=params
